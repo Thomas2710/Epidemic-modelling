@@ -4,16 +4,6 @@ import matplotlib.pyplot as plt
 
 import os 
 
-#PARAMS
-country = 'Italy'
-interesting_columns = ['iso_code', 'date','total_cases', 'new_cases', 'total_deaths', 'new_deaths', 'total_tests', 'new_tests', 'positive_rate', 'population']
-
-datapath = '/data'
-raw_file = '/raw.csv'
-recoveries_file = '/recovery.csv'
-refined_file = '/refined.csv'
-
-
 def get_data(filepath):
     current_path = os.getcwd()
     df = pd.read_csv(current_path+filepath)
@@ -38,17 +28,45 @@ def insert_missing_dates(df):
     print(get_missing_dates(df))
     return df
 
-df = get_data(datapath+raw_file)
-df_recoveries = get_data(datapath+recoveries_file)
-missing_recovery_dates = get_missing_dates(df_recoveries)
-print(missing_recovery_dates)
+def prepare_raw_data(datapath, recoveries_file, raw_file, refined_file ,country):
+    interesting_columns = ['iso_code', 'date','total_cases', 'new_cases', 'total_deaths', 'new_deaths', 'total_tests', 'new_tests', 'positive_rate', 'population']
+    
+    df_recoveries = get_data(datapath+recoveries_file)
+    missing_recovery_dates = get_missing_dates(df_recoveries)
+    print(missing_recovery_dates)
 
 
-#Saving italian rows without null
-df_ita = df[df['location'] == country]
-df_ita_filtered = df_ita[interesting_columns].dropna()
-df_ita_filtered.to_csv(os.getcwd()+datapath+refined_file)
-missing_ita_dates = get_missing_dates(df_ita_filtered)
-print(missing_ita_dates)
+    #Saving italian rows without null
+    df = get_data(datapath+raw_file)
+    df_ita = df[df['location'] == country]
+    df_ita_filtered = df_ita[interesting_columns].dropna()
+    df_ita_filtered.to_csv(os.getcwd()+datapath+refined_file)
+    missing_ita_dates = get_missing_dates(df_ita_filtered)
+    print(missing_ita_dates)
 
-#Further investigation on missing values for those rows 
+    #Missing code for merging, done easily with excel
+    return 
+    
+
+def main():
+    week_len = 7
+    #PARAMS
+    country = 'Italy'
+    datapath = '/data'
+    raw_file = '/raw.csv'
+    recoveries_file = '/recovery.csv'
+    refined_file = '/refined.csv'
+    processed_file = '/processed.csv'
+
+
+    df =  get_data(datapath+processed_file)
+
+    new_df = df[['total_cases', 'new_cases', 'total_deaths', 'new_deaths','total_recoveries','active_infected', 'population']].groupby(np.arange(len(df))//week_len).mean()
+    new_df['new_deaths'] = new_df['new_deaths'].apply(lambda x: x*week_len)
+    new_df['new_cases'] = new_df['new_cases'].apply(lambda x: x*week_len)
+    df = new_df
+    print(df.head())
+
+
+if __name__ == '__main__':
+    main()
