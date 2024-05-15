@@ -8,7 +8,8 @@
 # dI/dt = Lambda * S * I - (Gamma * I) - (Mu * I)
 # dR/dt = Gamma * I
 # dD/dt = Mu * I
-# S + I + R + D = 1
+# S + I + R + D = N 
+
 
 # Infection over time
 # I(t) is proprtional to exp(Lambda * ((S - 1/R0)*I))
@@ -24,7 +25,6 @@ initial_conditions = {
     "deaths": 80,
     "recovered": 20,
 }
-
 
 class SIRD:
     def __init__(self, R0: float, M: float, P: int):
