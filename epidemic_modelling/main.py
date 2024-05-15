@@ -31,7 +31,7 @@ def insert_missing_dates(df):
     print(get_missing_dates(df))
     return df
 
-
+'''
 def prepare_raw_data(datapath, recoveries_file, raw_file, refined_file, country):
     interesting_columns = [
         "iso_code",
@@ -60,7 +60,7 @@ def prepare_raw_data(datapath, recoveries_file, raw_file, refined_file, country)
 
     # Missing code for merging, done easily with excel
     return
-
+'''
 
 def main():
     week_len = 7
@@ -68,32 +68,38 @@ def main():
     country = "Italy"
     datapath = "/data"
     raw_file = "/raw.csv"
-    recoveries_file = "/recovery.csv"
-    refined_file = "/refined.csv"
     processed_file = "/processed.csv"
 
-    df = get_data(datapath + processed_file)
+    #FIX with real value
+    population_it = 50000000
+
+    df = get_data(datapath + raw_file)
 
     new_df = (
         df[
             [
-                "total_cases",
-                "new_cases",
-                "total_deaths",
-                "new_deaths",
-                "total_recoveries",
-                "active_infected",
-                "population",
+                "totale_positivi",
+                "variazione_totale_positivi",
+                "nuovi_positivi",
+                "dimessi_guariti",
+                "deceduti",
+                "totale_ospedalizzati",
+                "isolamento_domiciliare",
             ]
         ]
         .groupby(np.arange(len(df)) // week_len)
         .mean()
     )
-    new_df["new_deaths"] = new_df["new_deaths"].apply(lambda x: x * week_len)
-    new_df["new_cases"] = new_df["new_cases"].apply(lambda x: x * week_len)
-    df = new_df
-    print(df.head())
+    new_df["nuovi_positivi"] = new_df["nuovi_positivi"].apply(lambda x: x * week_len)
+    new_df["dimessi_guariti"] = new_df["dimessi_guariti"].apply(lambda x: x * week_len)
+    new_df["deceduti"] = new_df["deceduti"].apply(lambda x: x * week_len)
 
+    new_df['totale_positivi'] = new_df['totale_positivi'].apply(np.floor)
+    new_df['variazione_totale_positivi'] = new_df['variazione_totale_positivi'].apply(np.floor)
+    new_df['totale_ospedalizzati'] = new_df['totale_ospedalizzati'].apply(np.floor)
+    new_df['isolamento_domiciliare'] = new_df['isolamento_domiciliare'].apply(np.floor)
+    df = new_df
+    df.to_csv(os.getcwd() + datapath + processed_file)
 
 if __name__ == "__main__":
     main()
