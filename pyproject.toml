@@ -26,3 +26,4 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.scripts]
 main = "epidemic_modelling.main:main"
 sird = "epidemic_modelling.sird:main"
+pso = "epidemic_modelling.pso:main"

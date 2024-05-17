@@ -75,31 +75,52 @@ def main():
 
     df = get_data(datapath + raw_file)
 
-    new_df = (
-        df[
-            [
-                "totale_positivi",
-                "variazione_totale_positivi",
-                "nuovi_positivi",
-                "dimessi_guariti",
-                "deceduti",
-                "totale_ospedalizzati",
-                "isolamento_domiciliare",
-            ]
-        ]
-        .groupby(np.arange(len(df)) // week_len)
-        .mean()
-    )
-    new_df["nuovi_positivi"] = new_df["nuovi_positivi"].apply(lambda x: x * week_len)
-    new_df["dimessi_guariti"] = new_df["dimessi_guariti"].apply(lambda x: x * week_len)
-    new_df["deceduti"] = new_df["deceduti"].apply(lambda x: x * week_len)
+    # new_df = (
+    #     df[
+    #         [
+    #             "totale_positivi",
+    #             "variazione_totale_positivi",
+    #             "nuovi_positivi",
+    #             "dimessi_guariti",
+    #             "deceduti",
+    #             "totale_ospedalizzati",
+    #             "isolamento_domiciliare",
+    #         ]
+    #     ]
+    #     .groupby(np.arange(len(df)) // week_len)
+    #     .mean()
+    # )
+    # new_df["nuovi_positivi"] = new_df["nuovi_positivi"].apply(lambda x: x * week_len)
+    # new_df["dimessi_guariti"] = new_df["dimessi_guariti"].apply(lambda x: x * week_len)
+    # new_df["deceduti"] = new_df["deceduti"].apply(lambda x: x * week_len)
 
-    new_df['totale_positivi'] = new_df['totale_positivi'].apply(np.floor)
-    new_df['variazione_totale_positivi'] = new_df['variazione_totale_positivi'].apply(np.floor)
-    new_df['totale_ospedalizzati'] = new_df['totale_ospedalizzati'].apply(np.floor)
-    new_df['isolamento_domiciliare'] = new_df['isolamento_domiciliare'].apply(np.floor)
-    df = new_df
-    df.to_csv(os.getcwd() + datapath + processed_file)
+    # new_df['totale_positivi'] = new_df['totale_positivi'].apply(np.floor)
+    # new_df['variazione_totale_positivi'] = new_df['variazione_totale_positivi'].apply(np.floor)
+    # new_df['totale_ospedalizzati'] = new_df['totale_ospedalizzati'].apply(np.floor)
+    # new_df['isolamento_domiciliare'] = new_df['isolamento_domiciliare'].apply(np.floor)
+    # df = new_df
+    # df.to_csv(os.getcwd() + datapath + processed_file)
+    df["data"] = pd.to_datetime(df["data"])
+    df.set_index("data", inplace=True)
+    total_positives = df["totale_positivi"].resample('W').last()
+    recovered = df["dimessi_guariti"].resample('W').last()
+    deaths = df["deceduti"].resample('W').last()
+
+    # replace date with 0 indexed integer
+    new_df = pd.DataFrame(
+        {
+            "totale_positivi": total_positives,
+            "dimessi_guariti": recovered,
+            "deceduti": deaths,
+        },
+    )
+
+
+
+    new_df.set_index(np.arange(len(new_df)), inplace=True)
+
+    new_df.to_csv(os.getcwd() + datapath + processed_file)
+
 
 if __name__ == "__main__":
     main()

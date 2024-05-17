@@ -105,7 +105,7 @@ class SIRD:
 
     def eqns(self, t: int, y: tuple, lamb: float, gamma: float, mu: float):
         S, I, R, D = y
-        print(lamb, gamma, mu)
+        # print(lamb, gamma, mu)
         return [
             self.dSdt(S, I, lamb),
             self.dIdt(S, I, lamb, gamma, mu),
@@ -123,10 +123,9 @@ class SIRD:
         self.y0 = [initial_S, initial_I, initial_R, initial_D]
 
         # Compute coefficients
-        self.gamma = 1 / self.P
-        self.mu = self.gamma * self.M
-        self.lamb = self.R0 * (self.gamma + self.mu)
-        print(f"Lambda: {self.lamb}, Gamma: {self.gamma}, Mu: {self.mu}")
+        self.lamb = 0.0
+        self.gamma = 0.36164382721513993
+        self.mu = 0.21986301446034687
 
     def solve(self, initial_conditions: dict, time_frame: int = 300):
         """
