@@ -31,7 +31,8 @@ def insert_missing_dates(df):
     print(get_missing_dates(df))
     return df
 
-'''
+
+"""
 def prepare_raw_data(datapath, recoveries_file, raw_file, refined_file, country):
     interesting_columns = [
         "iso_code",
@@ -60,7 +61,8 @@ def prepare_raw_data(datapath, recoveries_file, raw_file, refined_file, country)
 
     # Missing code for merging, done easily with excel
     return
-'''
+"""
+
 
 def main():
     week_len = 7
@@ -70,7 +72,7 @@ def main():
     raw_file = "/raw.csv"
     processed_file = "/processed.csv"
 
-    #FIX with real value
+    # FIX with real value
     population_it = 50000000
 
     df = get_data(datapath + raw_file)
@@ -102,9 +104,9 @@ def main():
     # df.to_csv(os.getcwd() + datapath + processed_file)
     df["data"] = pd.to_datetime(df["data"])
     df.set_index("data", inplace=True)
-    total_positives = df["totale_positivi"].resample('W').last()
-    recovered = df["dimessi_guariti"].resample('W').last()
-    deaths = df["deceduti"].resample('W').last()
+    total_positives = df["totale_positivi"].resample("W").last()
+    recovered = df["dimessi_guariti"].resample("W").last()
+    deaths = df["deceduti"].resample("W").last()
 
     # replace date with 0 indexed integer
     new_df = pd.DataFrame(
@@ -114,8 +116,6 @@ def main():
             "deceduti": deaths,
         },
     )
-
-
 
     new_df.set_index(np.arange(len(new_df)), inplace=True)
 

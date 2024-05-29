@@ -8,7 +8,7 @@
 # dI/dt = Lambda * S * I - (Gamma * I) - (Mu * I)
 # dR/dt = Gamma * I
 # dD/dt = Mu * I
-# S + I + R + D = N 
+# S + I + R + D = N
 
 
 # Infection over time
@@ -25,6 +25,7 @@ initial_conditions = {
     "deaths": 80,
     "recovered": 20,
 }
+
 
 class SIRD:
     def __init__(self, R0: float, M: float, P: int):
@@ -165,17 +166,17 @@ class SIRD:
             t_eval=np.linspace(0, time_frame, time_frame * 2),
         )
         return self
-    
+
     def get_params(self):
         """
         Return the model parameters after a simulation has been run
-        
+
         Returns:
         ------------
         dict: dictionary containing model parameters
         """
         params = self.soln.y[:, -1]
-        return { "S": params[0], "I": params[1], "R": params[2], "D": params[3]}
+        return {"S": params[0], "I": params[1], "R": params[2], "D": params[3]}
 
     def plot(self, ax=None, susceptible=True):
         S, I, R, D = self.soln.y
