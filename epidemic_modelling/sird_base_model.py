@@ -1,18 +1,18 @@
-# Lambda = contact rate
+# Beta = contact rate
 # Gamma = recovery rate
-# Mu = death rate
-# Average mortality rate = Mu/Gamma
-# R0 (contact number) = Lambda/(Gamma + Mu)
+# Delta = death rate
+# Average mortality rate = Delta/Gamma
+# R0 (contact number) = Beta/(Gamma + Delta)
 
-# dS/dt = -Lambda * S * I
-# dI/dt = Lambda * S * I - (Gamma * I) - (Mu * I)
+# dS/dt = -Beta * S * I
+# dI/dt = Beta * S * I - (Gamma * I) - (Delta * I)
 # dR/dt = Gamma * I
-# dD/dt = Mu * I
+# dD/dt = Delta * I
 # S + I + R + D = N
 
 
 # Infection over time
-# I(t) is proprtional to exp(Lambda * ((S - 1/R0)*I))
+# I(t) is proprtional to exp(Beta * ((S - 1/R0)*I))
 
 from scipy.integrate import solve_ivp
 import seaborn as sns
@@ -28,17 +28,34 @@ initial_conditions = {
 
 
 class SIRD:
-    def __init__(self, R0: float, M: float, P: int):
-        # Model parameters
+    def __init__(self, R0: float = None, M: float = None, P: float = None, beta: float = None, gamma: float = None, delta: float = None):
+        if R0 is not None and M is not None and P is not None:
+            # Model parameters given R0, M, P
+            # R0: Basic Reproductive Rate [people]
+            self.R0 = R0
+            # M: mortality rate ratio
+            self.M = M
+            # P: Average infectious period [days]
+            self.P = P # 5.1 days
 
-        # R0: Basic Reproductive Rate [people]
-        self.R0 = R0
-        # M: mortality rate ratio
-        self.M = M
-        # P: Average infectious period [days]
-        self.P = P
+            # Calculate beta, gamma, delta from R0, M, P
+            self.beta = self.R0 / self.P
+            self.gamma = (1 - self.M) / self.P
+            self.delta = self.M / self.P
+        elif beta is not None and gamma is not None and delta is not None:
+            # Model parameters given beta, gamma, delta
+            self.beta = beta
+            self.gamma = gamma
+            self.delta = delta
 
-    def dSdt(self, S: int, I: int, lamb: float):
+            # Calculate R0, M, P from beta, gamma, delta
+            self.P = 1 / (self.gamma + self.delta)
+            self.R0 = self.beta * self.P
+            self.M = self.delta / (self.gamma + self.delta)
+        else:
+            raise ValueError("Either (R0, M, P) or (beta, gamma, delta) must be provided")
+
+    def dSdt(self, S: int, I: int, beta: float):
         """
         Compute Susceptible parameter over time
 
@@ -46,15 +63,15 @@ class SIRD:
         ------------
         S: Susceptible population
         I: Infected population
-        lamb: Contact rate
+        beta: Contact rate
 
         Returns:
         ------------
         dSdt: Susceptible population over time
         """
-        return -lamb * S * I
+        return -beta * S * I
 
-    def dIdt(self, S: int, I: int, lamb: float, gamma: float, mu: float):
+    def dIdt(self, S: int, I: int, beta: float, gamma: float, delta: float):
         """
         Compute Infected parameter over time
 
@@ -63,15 +80,15 @@ class SIRD:
 
         S: Susceptible population
         I: Infected population
-        lamb: Contact rate
+        beta: Contact rate
         gamma: Recovery rate
-        mu: Death rate
+        delta: Death rate
 
         Returns:
         ------------
         dIdt: Infected population over time
         """
-        return lamb * S * I - gamma * I - mu * I
+        return beta * S * I - gamma * I - delta * I
 
     def dRdt(self, I: int, gamma: float):
         """
@@ -88,45 +105,51 @@ class SIRD:
         """
         return gamma * I
 
-    def dDdt(self, I: int, mu: float):
+    def dDdt(self, I: int, delta: float):
         """
         Compute Deaths parameter over time
 
         Parameters:
         ------------
         I: Infected population
-        mu: Death rate
+        delta: Death rate
 
         Returns:
         ------------
         dDdt: Deaths population over time
         """
 
-        return mu * I
+        return delta * I
 
-    def eqns(self, t: int, y: tuple, lamb: float, gamma: float, mu: float):
+    def eqns(self, t: int, y: tuple, beta: float, gamma: float, delta: float):
         S, I, R, D = y
-        # print(lamb, gamma, mu)
+        # print(beta, gamma, delta)
         return [
-            self.dSdt(S, I, lamb),
-            self.dIdt(S, I, lamb, gamma, mu),
+            self.dSdt(S, I, beta),
+            self.dIdt(S, I, beta, gamma, delta),
             self.dRdt(I, gamma),
-            self.dDdt(I, mu),
+            self.dDdt(I, delta),
         ]
 
     def setup(self, population: int, cases: int, recovered: int, deaths: int):
         # Compute initial values
         self.population = population
-        initial_S = (population - cases) / population
+        initial_S = (population - cases - recovered - deaths) / population
         initial_R = recovered / population
         initial_D = deaths / population
-        initial_I = 1 - initial_S - initial_R - initial_D
+        initial_I = cases / population
         self.y0 = [initial_S, initial_I, initial_R, initial_D]
 
+        # Coeffs are computed in the __init__ func
+
         # Compute coefficients
-        self.lamb = 0.0
-        self.gamma = 0.36164382721513993
-        self.mu = 0.21986301446034687
+        # self.beta = 0.2
+        # self.gamma = 0.7
+        # self.delta = 0.1
+
+        # self.beta = self.R0 / self.P
+        # self.gamma = (1 - self.M) / self.P
+        # self.delta = self.M / self.P
 
     def solve(self, initial_conditions: dict, time_frame: int = 300):
         """
@@ -162,7 +185,7 @@ class SIRD:
             self.eqns,
             t_span,
             self.y0,
-            args=(self.lamb, self.gamma, self.mu),
+            args=(self.beta, self.gamma, self.delta),
             t_eval=np.linspace(0, time_frame, time_frame * 2),
         )
         return self
@@ -176,7 +199,7 @@ class SIRD:
         dict: dictionary containing model parameters
         """
         params = self.soln.y[:, -1]
-        return {"S": params[0], "I": params[1], "R": params[2], "D": params[3]}
+        return {"S": params[0], "I": params[1], "R": params[2], "D": params[3], "Sum params:" : params.sum()}
 
     def plot(self, ax=None, susceptible=True):
         S, I, R, D = self.soln.y
