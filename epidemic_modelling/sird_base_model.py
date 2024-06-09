@@ -20,10 +20,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 initial_conditions = {
-    "population": 60000000,
-    "cases": 3000,
-    "deaths": 80,
-    "recovered": 20,
+    "population": 60e6,
+    'initial_I': 3000,
+    'initial_R': 20,
+    'initial_D': 80
 }
 
 
@@ -131,20 +131,18 @@ class SIRD:
             self.dDdt(I, delta),
         ]
 
-    def setup(self, initial_S: int, initial_I: int, initial_R: int, initial_D: int):
+    def setup(self, population: int, initial_I: int, initial_R: int, initial_D: int):
         # Compute initial values
-        self.population = initial_S
-        initial_S = (self.population - initial_I - initial_R - initial_D)
-        initial_R = initial_R
-        initial_D = initial_D 
-        initial_I = initial_I
+        self.population = population
+        initial_S = (population - initial_I - initial_R - initial_D) / population
+        initial_R /= population
+        initial_D /= population
+        initial_I /=  population
         self.y0 = [initial_S, initial_I, initial_R, initial_D]
 
 
         computed_population = (initial_S + initial_I + initial_R + initial_D)
-        match = self.population == computed_population
-        assert match, "Error in the computation of the population!"
-
+        assert computed_population == 1, "Error in the computation of the population!"
         # Coeffs are computed in the __init__ func
 
         # Compute coefficients
@@ -175,7 +173,7 @@ class SIRD:
         """
 
         self.setup(
-            initial_conditions["initial_S"],
+            initial_conditions["population"],
             initial_conditions["initial_I"],
             initial_conditions["initial_R"],
             initial_conditions["initial_D"],
@@ -197,7 +195,7 @@ class SIRD:
         )
         return self
 
-    def get_params(self):
+    def get_sird_values(self):
         """
         Return the model parameters after a simulation has been run
 
@@ -206,8 +204,11 @@ class SIRD:
         dict: dictionary containing model parameters
         """
         params = self.soln.y[:, -1]
-        return {"S": params[0], "I": params[1], "R": params[2], "D": params[3], "Sum params:" : sum(params)}
+        params = {"S": params[0], "I": params[1], "R": params[2], "D": params[3], "Sum params:" : sum(params)}
+        params = {k: v * self.population for k, v in params.items() if k != "Sum params"}
+        return params
     
+
     def get_initial_params(self):
         """
         Return the initial model parameters
@@ -239,8 +240,7 @@ class SIRD:
 
         beta , gamma, delta = params
         initial_params = self.get_initial_params()
-        print('got initial params')
-        initial_susceptible = initial_params["initial_S"]
+        initial_susceptible = initial_params["population"] - initial_params["initial_I"] - initial_params["initial_R"] - initial_params["initial_D"]
         initial_infected = initial_params["initial_I"]
         initial_recovered = initial_params["initial_R"]
         initial_deceased = initial_params["initial_D"]
@@ -249,9 +249,7 @@ class SIRD:
         current_infected = (initial_infected + (beta * initial_susceptible * initial_infected / self.population)- gamma * initial_infected- delta * initial_infected)
         current_recovered = initial_recovered + gamma * initial_infected
         current_deceased = initial_deceased + delta * initial_infected
-        print('about to solve')
         self.solve(initial_params, time_frame)
-        print('solved')
         desired_params = self.get_params()
 
         if loss == "MSE":
@@ -268,13 +266,13 @@ class SIRD:
         N = self.population
 
         print(f"For a population of {N} people, after {t[-1]:.0f} days there were:")
-        print(f"{D[-1]*100:.1f}% total deaths, or {D[-1]*N:.0f} people.")
-        print(f"{R[-1]*100:.1f}% total recovered, or {R[-1]*N:.0f} people.")
+        print(f"{D[-1]*100:.1f}% total deaths, or {D[-1]:.0f} people.")
+        print(f"{R[-1]*100:.1f}% total recovered, or {R[-1]:.0f} people.")
         print(
-            f"At the virus' maximum {I.max()*100:.1f}% people were simultaneously infected, or {I.max()*N:.0f} people."
+            f"At the virus' maximum {I.max()*100:.1f}% people were simultaneously infected, or {I.max():.0f} people."
         )
         print(
-            f"After {t[-1]:.0f} days the virus was present in less than {I[-1]*N:.0f} individuals."
+            f"After {t[-1]:.0f} days the virus was present in less than {I[-1]:.0f} individuals."
         )
 
         if ax is None:
@@ -284,10 +282,10 @@ class SIRD:
         ax.set_xlabel("Time [days]")
         ax.set_ylabel("Number")
         if susceptible:
-            ax.plot(t, S * N, label="Susceptible", linewidth=2, color="blue")
-        ax.plot(t, I * N, label="Infected", linewidth=2, color="orange")
-        ax.plot(t, R * N, label="Recovered", linewidth=2, color="green")
-        ax.plot(t, D * N, label="Deceased", linewidth=2, color="black")
+            ax.plot(t, S*N , label="Susceptible", linewidth=2, color="blue")
+        ax.plot(t, I*N , label="Infected", linewidth=2, color="orange")
+        ax.plot(t, R*N , label="Recovered", linewidth=2, color="green")
+        ax.plot(t, D*N , label="Deceased", linewidth=2, color="black")
         ax.legend()
 
         return ax
