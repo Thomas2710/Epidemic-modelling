@@ -131,14 +131,19 @@ class SIRD:
             self.dDdt(I, delta),
         ]
 
-    def setup(self, population: int, cases: int, recovered: int, deaths: int):
+    def setup(self, initial_S: int, initial_I: int, initial_R: int, initial_D: int):
         # Compute initial values
-        self.population = population
-        initial_S = (population - cases - recovered - deaths) / population
-        initial_R = recovered / population
-        initial_D = deaths / population
-        initial_I = cases / population
+        self.population = initial_S
+        initial_S = (self.population - initial_I - initial_R - initial_D)
+        initial_R = initial_R
+        initial_D = initial_D 
+        initial_I = initial_I
         self.y0 = [initial_S, initial_I, initial_R, initial_D]
+
+
+        computed_population = (initial_S + initial_I + initial_R + initial_D)
+        match = self.population == computed_population
+        assert match, "Error in the computation of the population!"
 
         # Coeffs are computed in the __init__ func
 
@@ -170,17 +175,19 @@ class SIRD:
         """
 
         self.setup(
-            initial_conditions["population"],
-            initial_conditions["cases"],
-            initial_conditions["recovered"],
-            initial_conditions["deaths"],
+            initial_conditions["initial_S"],
+            initial_conditions["initial_I"],
+            initial_conditions["initial_R"],
+            initial_conditions["initial_D"],
         )
-
+        print('setup solve')
         t_span = (
             0,
             time_frame,
         )  # tf is number of days to run simulation for, defaulting to 300
-
+        print('In solve about to solve')
+        print('solving for time frame:', time_frame)
+        print('beta gamma and delta are: ', self.beta, self.gamma, self.delta)
         self.soln = solve_ivp(
             self.eqns,
             t_span,
@@ -199,7 +206,61 @@ class SIRD:
         dict: dictionary containing model parameters
         """
         params = self.soln.y[:, -1]
-        return {"S": params[0], "I": params[1], "R": params[2], "D": params[3], "Sum params:" : params.sum()}
+        return {"S": params[0], "I": params[1], "R": params[2], "D": params[3], "Sum params:" : sum(params)}
+    
+    def get_initial_params(self):
+        """
+        Return the initial model parameters
+
+        Returns:
+        ------------
+        dict: dictionary containing model parameters
+        """
+        params = self.y0
+        return {"initial_S": params[0], "initial_I": params[1], "initial_R": params[2], "initial_D": params[3], "Sum params:" : sum(params)}
+
+    def compute_loss(self, params: tuple, time_frame: int, loss:str = "MSE"):
+        """
+        Compute the MSE
+
+        Parameters:
+        ------------
+        params: dict
+            Dictionary containing the model parameters computed via PSO
+        time_frame: int
+            Number of weeks to run simulation for
+        loss: str
+            Loss function to use
+
+        Returns:
+        ------------
+        float: loss of the parameters
+        """
+
+        beta , gamma, delta = params
+        initial_params = self.get_initial_params()
+        print('got initial params')
+        initial_susceptible = initial_params["initial_S"]
+        initial_infected = initial_params["initial_I"]
+        initial_recovered = initial_params["initial_R"]
+        initial_deceased = initial_params["initial_D"]
+
+        current_susceptible = (initial_susceptible - (beta * initial_susceptible * initial_infected / self.population))
+        current_infected = (initial_infected + (beta * initial_susceptible * initial_infected / self.population)- gamma * initial_infected- delta * initial_infected)
+        current_recovered = initial_recovered + gamma * initial_infected
+        current_deceased = initial_deceased + delta * initial_infected
+        print('about to solve')
+        self.solve(initial_params, time_frame)
+        print('solved')
+        desired_params = self.get_params()
+
+        if loss == "MSE":
+            loss_susceptible = current_susceptible - desired_params["S"] ** 2,
+            loss_infected = current_infected - desired_params["I"] ** 2,
+            loss_recovered = current_recovered - desired_params["R"] ** 2,
+            loss_deceased = current_deceased - desired_params["D"] ** 2,
+            
+        return loss_susceptible, loss_infected, loss_recovered, loss_deceased
 
     def plot(self, ax=None, susceptible=True):
         S, I, R, D = self.soln.y

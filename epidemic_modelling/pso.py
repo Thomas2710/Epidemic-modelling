@@ -10,6 +10,8 @@ from inspyred import ec
 import math
 import pandas as pd
 from inspyred.swarm import topologies
+from sird_base_model import SIRD
+from tqdm import tqdm
 
 import inspyred.ec.terminators
 
@@ -52,6 +54,8 @@ class MySIRD(Benchmark):
         infected = self.data["totale_positivi"].values[:]
     def evaluator(self, candidates, args):
         # TODO: MSE and SIRD integration
+
+
         fitness = []
 
         # For the moment we are going to consider only the first 10 weeks
@@ -61,26 +65,10 @@ class MySIRD(Benchmark):
             recovered_t = self.data["dimessi_guariti"].iloc[current_time]
             deceased_t = self.data["deceduti"].iloc[current_time]
 
-            # initial conditions
-            initial_susceptible = (
-                self.population - infected_t - recovered_t - deceased_t
-            )
-            initial_infected = infected_t
-            initial_recovered = recovered_t
-            initial_deceased = deceased_t
-
+            model = SIRD(2, 0, 5.1)   
             # print(
             #     f"At week:{week}\n\tSusceptible: {initial_susceptible}, Infected: {initial_infected}, Recovered: {initial_recovered}, Deceased: {initial_deceased}"
             # )
-
-            computed_population = (
-                initial_susceptible
-                + initial_infected
-                + initial_recovered
-                + initial_deceased
-            )
-            match = self.population == computed_population
-            assert match, "Error in the computation of the population!"
 
             # print(
             #     f"Total population: {self.population}, S+I+R+D: {computed_population}, Matching {self.population == computed_population}"
@@ -88,30 +76,13 @@ class MySIRD(Benchmark):
 
             # input()
 
-            for idx, (beta, gamma, delta) in enumerate(candidates):
-                # susceptible, infected, recovered, deceased of the current candidate
-                current_susceptible = (
-                    initial_susceptible - (beta * initial_susceptible * initial_infected / self.population)
-                )
-                current_infected = (
-                    initial_infected
-                    + (beta * initial_susceptible * initial_infected / self.population)
-                    - gamma * initial_infected
-                    - delta * initial_infected
-                )
-                current_recovered = initial_recovered + gamma * initial_infected
-                current_deceased = initial_deceased + delta * initial_infected
-                
-                desired_infected = self.data["totale_positivi"].iloc[current_time+1] 
-                desired_deceased = self.data["deceduti"].iloc[current_time+1]
-                desired_recovered = self.data["dimessi_guariti"].iloc[current_time+1]
-                desired_susceptible = self.population - desired_infected - desired_recovered - desired_deceased
-
-                loss_susceptible = (current_susceptible - desired_susceptible) ** 2
-                loss_infected = (current_infected - desired_infected) ** 2
-                loss_recovered = (current_recovered - desired_recovered) ** 2
-                loss_deceased = (current_deceased - desired_deceased) ** 2
-
+            for idx, (beta, gamma, delta) in tqdm(enumerate(candidates)):
+                init_conditions = {'initial_S': self.population, 'initial_I': infected_t, 'initial_R': recovered_t, 'initial_D': deceased_t}
+                #time_frame is the amount of weeks ahead we want to compute the parameters
+                model.setup(**init_conditions)
+                print('After setup')
+                loss_susceptible, loss_infected, loss_recovered, loss_deceased = model.compute_loss((beta, gamma, delta), time_frame=1)
+                print('After loss')
                 # Print losses obtained
                 # print(
                 #     f"Losses: S: {loss_susceptible}, I: {loss_infected}, R: {loss_recovered}, D: {loss_deceased}"
@@ -126,10 +97,10 @@ class MySIRD(Benchmark):
                 write_to_csv(
                     idx,
                     week,
-                    current_susceptible,
-                    current_infected,
-                    current_recovered,
-                    current_deceased,
+                    model.get_params()['S'],
+                    model.get_params()['I'],
+                    model.get_params()['R'],
+                    model.get_params()['D'],
                     loss_normalized,
                 )
 
