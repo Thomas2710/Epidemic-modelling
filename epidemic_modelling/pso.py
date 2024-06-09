@@ -16,9 +16,14 @@ from tqdm import tqdm
 import inspyred.ec.terminators
 
 SEED = 42
-MAX_GENERATIONS = 5
-POPULATION_SIZE = 100
+MAX_GENERATIONS = 1e3
+POPULATION_SIZE = 1e3
 WEEKS = 10
+LAG = 30
+DAYS = 70
+PARAMS_THRESHOLD = 0.99
+FACTOR_LOWER_BOUND = 0.001
+FACTOR_UPPER_BOUND = 1.0
 
 def write_to_csv(idx, w, s, i, r, d, fitness):
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,24 +35,33 @@ def write_to_csv(idx, w, s, i, r, d, fitness):
             )
         f.write(f"{idx},{w},{s},{i},{r},{d},{fitness}\n")
 
+def get_sird_from_data(data: pd.DataFrame, start_week: int, end_week: int, population: int):
+    infected_t = data["totale_positivi"].iloc[start_week:end_week].to_numpy().astype(float)
+    recovered_t = data["dimessi_guariti"].iloc[start_week:end_week].to_numpy().astype(float)
+    deceased_t = data["deceduti"].iloc[start_week:end_week].to_numpy().astype(float)
+    susceptible_t = data['suscettibili'].iloc[start_week:end_week].to_numpy().astype(float)
+    all_conds = {"population": population, "initial_I": infected_t, "initial_R": recovered_t, "initial_D": deceased_t, "initial_S": susceptible_t}
+    initial_conds = {"population": population, "initial_I": infected_t[0], "initial_R": recovered_t[0], "initial_D": deceased_t[0], "initial_S": susceptible_t[0]}
+    return initial_conds, all_conds
 
 class MySIRD(Benchmark):
     def __init__(self, dimensions=3):
         Benchmark.__init__(self, dimensions)
-        self.bounder = ec.Bounder([0.0] * self.dimensions, [1.0] * self.dimensions)
+        self.bounder = ec.Bounder([FACTOR_LOWER_BOUND] * self.dimensions, FACTOR_UPPER_BOUND * self.dimensions)
         self.maximize = False
         # self.global_optimum = [0 for _ in range(self.dimensions)]
         # self.t = 0
         # Absolute path of the data file
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        filepath = os.path.join(script_dir, "../data/processed.csv")
+        filepath = os.path.join(script_dir, "../data/daily_processed.csv")
         self.data = pd.read_csv(filepath)
         self.population = 60_000_000
+        self.epoch = 0
         random.seed = SEED
 
     def generator(self, random, args):
         # Generate an initial random candidate for each dimension
-        x = [random.uniform(0.0, 1.0) for _ in range(self.dimensions)]
+        x = [random.uniform(FACTOR_LOWER_BOUND, FACTOR_UPPER_BOUND) for _ in range(self.dimensions)]
         return x
 
     def get_ird(self):
@@ -59,55 +73,48 @@ class MySIRD(Benchmark):
         fitness = []
 
         # For the moment we are going to consider only the first 10 weeks
-        for current_time in range(0, 10):
-            week = current_time
-            infected_t = self.data["totale_positivi"].iloc[current_time]
-            recovered_t = self.data["dimessi_guariti"].iloc[current_time]
-            deceased_t = self.data["deceduti"].iloc[current_time]
+        initial_conds, _ = get_sird_from_data(self.data, LAG, DAYS + LAG, self.population)
+        _, future_conds = get_sird_from_data(self.data, LAG+1, DAYS + LAG + 1, self.population)
+        future_params = [future_conds['initial_S'], future_conds['initial_I'], future_conds['initial_R'], future_conds['initial_D']]
+    
 
-            model = SIRD(2, 0, 5.1)   
+        for idx, (beta, gamma, delta) in tqdm(enumerate(candidates)):
+            model = SIRD(beta = beta, gamma = gamma, delta = delta)
+            # solve
+            days = DAYS
+            # pickup GT
+            model.solve(initial_conds, days)
+            # Values obtained
+            computed_S, computed_I, computed_R, computed_D, sum_params = model.get_sird_values().values()
+            current_params = [computed_S, computed_I, computed_R, computed_D]
+            # Check if the sum of the parameters is valid
+            assert sum_params >= PARAMS_THRESHOLD, f"Sum of parameters is less than {PARAMS_THRESHOLD}"
+
+            # compute loss
+            losses = model.compute_loss(current_params, future_params, loss="MSE")
+
+            # Print losses obtained
             # print(
-            #     f"At week:{week}\n\tSusceptible: {initial_susceptible}, Infected: {initial_infected}, Recovered: {initial_recovered}, Deceased: {initial_deceased}"
+            #     f"Losses: S: {loss_susceptible}, I: {loss_infected}, R: {loss_recovered}, D: {loss_deceased}"
             # )
 
-            # print(
-            #     f"Total population: {self.population}, S+I+R+D: {computed_population}, Matching {self.population == computed_population}"
-            # )
+            loss_normalized = np.mean(losses)
 
-            # input()
+            # print(f"Loss normalized: {loss_normalized}")
+            sird_vals = model.get_sird_values()
+            write_to_csv(
+                idx,
+                self.epoch,
+                sird_vals["S"],
+                sird_vals["I"],
+                sird_vals["R"],
+                sird_vals["D"],
+                loss_normalized,
+            )
 
-            for idx, (beta, gamma, delta) in tqdm(enumerate(candidates)):
-                init_conditions = {'initial_S': self.population, 'initial_I': infected_t, 'initial_R': recovered_t, 'initial_D': deceased_t}
-                #time_frame is the amount of weeks ahead we want to compute the parameters
-                model.setup(**init_conditions)
-                print('After setup')
-                loss_susceptible, loss_infected, loss_recovered, loss_deceased = model.compute_loss((beta, gamma, delta), time_frame=1)
-                print('After loss')
-                # Print losses obtained
-                # print(
-                #     f"Losses: S: {loss_susceptible}, I: {loss_infected}, R: {loss_recovered}, D: {loss_deceased}"
-                # )
-
-                loss_normalized = np.mean(
-                    [loss_susceptible, loss_infected, loss_recovered, loss_deceased]
-                )
-
-                # print(f"Loss normalized: {loss_normalized}")
-
-                write_to_csv(
-                    idx,
-                    week,
-                    model.get_params()['S'],
-                    model.get_params()['I'],
-                    model.get_params()['R'],
-                    model.get_params()['D'],
-                    loss_normalized,
-                )
-
-                fitness.append(loss_normalized)
-
-        # print(fitness)
-        # input()
+            fitness.append(loss_normalized)
+            # print(f"\nFitness: {loss_normalized}\n")
+        self.epoch += 1
         return fitness
 
     @staticmethod
@@ -144,11 +151,12 @@ def main(prng=None, display=True):
         maximize=problem.maximize,
     )
 
+    # print(f"Final pop attributes: {final_pop}")
     with open(plot_filepath, "r") as f:
         # print number of lines
         print(f"Entries generated in the csv log: {len(f.readlines())-1}")
 
-    best = max(final_pop)
+    best = max(final_pop, key=lambda x: x.fitness)
 
     if display:
         print(f"Best solution provided: {best}")

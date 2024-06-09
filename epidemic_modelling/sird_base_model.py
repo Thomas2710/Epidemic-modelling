@@ -26,6 +26,7 @@ initial_conditions = {
     'initial_D': 80
 }
 
+ALLOWED_ERROR = 1e-5
 
 class SIRD:
     def __init__(self, R0: float = None, M: float = None, P: float = None, beta: float = None, gamma: float = None, delta: float = None):
@@ -142,7 +143,7 @@ class SIRD:
 
 
         computed_population = (initial_S + initial_I + initial_R + initial_D)
-        assert computed_population == 1, "Error in the computation of the population!"
+        assert abs(self.population - computed_population) >= ALLOWED_ERROR, "Error in the computation of the population!"
         # Coeffs are computed in the __init__ func
 
         # Compute coefficients
@@ -178,14 +179,14 @@ class SIRD:
             initial_conditions["initial_R"],
             initial_conditions["initial_D"],
         )
-        print('setup solve')
+        # print('setup solve')
         t_span = (
             0,
             time_frame,
         )  # tf is number of days to run simulation for, defaulting to 300
-        print('In solve about to solve')
-        print('solving for time frame:', time_frame)
-        print('beta gamma and delta are: ', self.beta, self.gamma, self.delta)
+        # print('In solve about to solve')
+        # print('solving for time frame:', time_frame)
+        # print('beta gamma and delta are: ', self.beta, self.gamma, self.delta)
         self.soln = solve_ivp(
             self.eqns,
             t_span,
@@ -208,6 +209,19 @@ class SIRD:
         params = {k: v * self.population for k, v in params.items() if k != "Sum params"}
         return params
     
+    def get_sird_series(self):
+        """
+        Return the model parameters after a simulation has been run
+
+        Returns:
+        ------------
+        dict: dictionary containing model parameters
+        """
+        params = self.soln.y * self.population
+        
+        params = {"S": params[0], "I": params[1], "R": params[2], "D": params[3]}
+        return params
+    
 
     def get_initial_params(self):
         """
@@ -220,7 +234,8 @@ class SIRD:
         params = self.y0
         return {"initial_S": params[0], "initial_I": params[1], "initial_R": params[2], "initial_D": params[3], "Sum params:" : sum(params)}
 
-    def compute_loss(self, params: tuple, time_frame: int, loss:str = "MSE"):
+    @staticmethod
+    def compute_loss(computed_sird: list, actual_sird: int, loss:str = "MSE"):
         """
         Compute the MSE
 
@@ -237,28 +252,18 @@ class SIRD:
         ------------
         float: loss of the parameters
         """
-
-        beta , gamma, delta = params
-        initial_params = self.get_initial_params()
-        initial_susceptible = initial_params["population"] - initial_params["initial_I"] - initial_params["initial_R"] - initial_params["initial_D"]
-        initial_infected = initial_params["initial_I"]
-        initial_recovered = initial_params["initial_R"]
-        initial_deceased = initial_params["initial_D"]
-
-        current_susceptible = (initial_susceptible - (beta * initial_susceptible * initial_infected / self.population))
-        current_infected = (initial_infected + (beta * initial_susceptible * initial_infected / self.population)- gamma * initial_infected- delta * initial_infected)
-        current_recovered = initial_recovered + gamma * initial_infected
-        current_deceased = initial_deceased + delta * initial_infected
-        self.solve(initial_params, time_frame)
-        desired_params = self.get_params()
-
+        computed_S, computed_I, computed_R, computed_D = computed_sird
+        actual_S, actual_I, actual_R, actual_D = actual_sird
+        
         if loss == "MSE":
-            loss_susceptible = current_susceptible - desired_params["S"] ** 2,
-            loss_infected = current_infected - desired_params["I"] ** 2,
-            loss_recovered = current_recovered - desired_params["R"] ** 2,
-            loss_deceased = current_deceased - desired_params["D"] ** 2,
-            
-        return loss_susceptible, loss_infected, loss_recovered, loss_deceased
+            loss_S = np.mean(computed_S - actual_S) ** 2
+            loss_I = np.mean(computed_I - actual_I) ** 2
+            loss_R = np.mean(computed_R - actual_R) ** 2
+            loss_D = np.mean(computed_D - actual_D) ** 2
+        else:
+            raise NotImplementedError("Only MSE loss is supported")
+
+        return loss_S, loss_I, loss_R, loss_D
 
     def plot(self, ax=None, susceptible=True):
         S, I, R, D = self.soln.y
