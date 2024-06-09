@@ -21,15 +21,24 @@ import numpy as np
 
 initial_conditions = {
     "population": 60e6,
-    'initial_I': 3000,
-    'initial_R': 20,
-    'initial_D': 80
+    "initial_I": 3000,
+    "initial_R": 20,
+    "initial_D": 80,
 }
 
 ALLOWED_ERROR = 1e-5
 
+
 class SIRD:
-    def __init__(self, R0: float = None, M: float = None, P: float = None, beta: float = None, gamma: float = None, delta: float = None):
+    def __init__(
+        self,
+        R0: float = None,
+        M: float = None,
+        P: float = None,
+        beta: float = None,
+        gamma: float = None,
+        delta: float = None,
+    ):
         if R0 is not None and M is not None and P is not None:
             # Model parameters given R0, M, P
             # R0: Basic Reproductive Rate [people]
@@ -37,7 +46,7 @@ class SIRD:
             # M: mortality rate ratio
             self.M = M
             # P: Average infectious period [days]
-            self.P = P # 5.1 days
+            self.P = P  # 5.1 days
 
             # Calculate beta, gamma, delta from R0, M, P
             self.beta = self.R0 / self.P
@@ -54,7 +63,9 @@ class SIRD:
             self.R0 = self.beta * self.P
             self.M = self.delta / (self.gamma + self.delta)
         else:
-            raise ValueError("Either (R0, M, P) or (beta, gamma, delta) must be provided")
+            raise ValueError(
+                "Either (R0, M, P) or (beta, gamma, delta) must be provided"
+            )
 
     def dSdt(self, S: int, I: int, beta: float):
         """
@@ -138,12 +149,13 @@ class SIRD:
         initial_S = (population - initial_I - initial_R - initial_D) / population
         initial_R /= population
         initial_D /= population
-        initial_I /=  population
+        initial_I /= population
         self.y0 = [initial_S, initial_I, initial_R, initial_D]
 
-
-        computed_population = (initial_S + initial_I + initial_R + initial_D)
-        assert abs(self.population - computed_population) >= ALLOWED_ERROR, "Error in the computation of the population!"
+        computed_population = initial_S + initial_I + initial_R + initial_D
+        assert (
+            abs(self.population - computed_population) >= ALLOWED_ERROR
+        ), "Error in the computation of the population!"
         # Coeffs are computed in the __init__ func
 
         # Compute coefficients
@@ -205,10 +217,18 @@ class SIRD:
         dict: dictionary containing model parameters
         """
         params = self.soln.y[:, -1]
-        params = {"S": params[0], "I": params[1], "R": params[2], "D": params[3], "Sum params:" : sum(params)}
-        params = {k: v * self.population for k, v in params.items() if k != "Sum params"}
+        params = {
+            "S": params[0],
+            "I": params[1],
+            "R": params[2],
+            "D": params[3],
+            "Sum params:": sum(params),
+        }
+        params = {
+            k: v * self.population for k, v in params.items() if k != "Sum params"
+        }
         return params
-    
+
     def get_sird_series(self):
         """
         Return the model parameters after a simulation has been run
@@ -218,10 +238,9 @@ class SIRD:
         dict: dictionary containing model parameters
         """
         params = self.soln.y * self.population
-        
+
         params = {"S": params[0], "I": params[1], "R": params[2], "D": params[3]}
         return params
-    
 
     def get_initial_params(self):
         """
@@ -232,10 +251,15 @@ class SIRD:
         dict: dictionary containing model parameters
         """
         params = self.y0
-        return {"initial_S": params[0], "initial_I": params[1], "initial_R": params[2], "initial_D": params[3], "Sum params:" : sum(params)}
+        return {
+            "initial_S": params[0],
+            "initial_I": params[1],
+            "initial_R": params[2],
+            "initial_D": params[3],
+            "Sum params:": sum(params),
+        }
 
-    @staticmethod
-    def compute_loss(computed_sird: list, actual_sird: int, loss:str = "MSE"):
+    def compute_loss(self, computed_sird: list, actual_sird: list, loss: str = "MSE"):
         """
         Compute the MSE
 
@@ -254,7 +278,7 @@ class SIRD:
         """
         computed_S, computed_I, computed_R, computed_D = computed_sird
         actual_S, actual_I, actual_R, actual_D = actual_sird
-        
+
         if loss == "MSE":
             loss_S = np.mean(computed_S - actual_S) ** 2
             loss_I = np.mean(computed_I - actual_I) ** 2
@@ -287,10 +311,10 @@ class SIRD:
         ax.set_xlabel("Time [days]")
         ax.set_ylabel("Number")
         if susceptible:
-            ax.plot(t, S*N , label="Susceptible", linewidth=2, color="blue")
-        ax.plot(t, I*N , label="Infected", linewidth=2, color="orange")
-        ax.plot(t, R*N , label="Recovered", linewidth=2, color="green")
-        ax.plot(t, D*N , label="Deceased", linewidth=2, color="black")
+            ax.plot(t, S * N, label="Susceptible", linewidth=2, color="blue")
+        ax.plot(t, I * N, label="Infected", linewidth=2, color="orange")
+        ax.plot(t, R * N, label="Recovered", linewidth=2, color="green")
+        ax.plot(t, D * N, label="Deceased", linewidth=2, color="black")
         ax.legend()
 
         return ax
