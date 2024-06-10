@@ -158,6 +158,8 @@ class MySIRD(Benchmark):
 
     def save_best_solution(self, final_pop, display=True):
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        if not os.path.exists(os.path.join(script_dir, "../data/solutions")):
+            os.makedirs(os.path.join(script_dir, "../data/solutions"))
         best_solution_filepath = os.path.join(
             script_dir, f"../data/solutions/{Config.NAME}.csv"
         )
@@ -177,6 +179,8 @@ class MySIRD(Benchmark):
 
 def clean_paths():
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    if not os.path.exists(os.path.join(script_dir, "../data/solutions")):
+            os.makedirs(os.path.join(script_dir, "../data/solutions"))
     best_solution_filepath = os.path.join(
         script_dir, f"../data/solutions/{Config.NAME}.csv"
     )
@@ -238,4 +242,4 @@ def main(display, baseline, shorter_weeks, prng):
 
 
 if __name__ == "__main__":
-    main(display=True)
+    main()
