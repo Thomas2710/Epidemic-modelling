@@ -180,12 +180,11 @@ class SIRD:
             initial_conditions["initial_R"],
             initial_conditions["initial_D"],
         )
-        print('setup solve')
+
         t_span = (
             0,
             time_frame,
         )  # tf is number of days to run simulation for, defaulting to 300
-        print('In solve about to solve')
         print('solving for time frame:', time_frame)
         print('beta gamma and delta are: ', self.beta, self.gamma, self.delta)
         self.soln = solve_ivp(
@@ -239,7 +238,6 @@ class SIRD:
 
         beta , gamma, delta = params
         initial_params = self.get_initial_params()
-        print('got initial params')
         initial_susceptible = initial_params["initial_S"]
         initial_infected = initial_params["initial_I"]
         initial_recovered = initial_params["initial_R"]
@@ -249,9 +247,7 @@ class SIRD:
         current_infected = (initial_infected + (beta * initial_susceptible * initial_infected / self.population)- gamma * initial_infected- delta * initial_infected)
         current_recovered = initial_recovered + gamma * initial_infected
         current_deceased = initial_deceased + delta * initial_infected
-        print('about to solve')
         self.solve(initial_params, time_frame)
-        print('solved')
         desired_params = self.get_params()
 
         if loss == "MSE":

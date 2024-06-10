@@ -71,9 +71,11 @@ def main():
     datapath = "/data"
     raw_file = "/raw.csv"
     processed_file = "/processed.csv"
+    augmented_file = "/augmented.csv"
+    daily_processed_file = "/daily_processed.csv"
 
     # FIX with real value
-    population_it = 50000000
+    population_it = 60000000
 
     df = get_data(datapath + raw_file)
 
@@ -104,6 +106,25 @@ def main():
     # df.to_csv(os.getcwd() + datapath + processed_file)
     df["data"] = pd.to_datetime(df["data"])
     df.set_index("data", inplace=True)
+
+    daily_positives = df['totale_positivi']
+    daily_recovered = df['dimessi_guariti']
+    daily_deaths = df['deceduti']
+    daily_suscettibili = population_it - df['totale_positivi'] - df['dimessi_guariti'] - df['deceduti']
+
+    daily_df = pd.DataFrame(
+        {
+        'totale_positivi': daily_positives,
+        'dimessi_guariti': daily_recovered,
+        'deceduti': daily_deaths,
+        'suscettibili': daily_suscettibili
+        }
+    )
+    daily_df.set_index(np.arange(len(daily_df)), inplace=True)
+    daily_df.to_csv(os.getcwd() + datapath + daily_processed_file)
+
+
+
     total_positives = df["totale_positivi"].resample("W").last()
     recovered = df["dimessi_guariti"].resample("W").last()
     deaths = df["deceduti"].resample("W").last()
@@ -118,9 +139,20 @@ def main():
     )
 
     new_df.set_index(np.arange(len(new_df)), inplace=True)
-
+    new_df['suscettibili'] = population_it - new_df['totale_positivi'] - new_df['dimessi_guariti'] - new_df['deceduti']
+    new_df['delta_suscettibili'] = -(new_df['suscettibili'] - new_df['suscettibili'].shift(-1))
+    new_df['delta_dimessi_guariti'] = -(new_df['dimessi_guariti'] - new_df['dimessi_guariti'].shift(-1))
+    new_df['delta_deceduti'] = -(new_df['deceduti'] - new_df['deceduti'].shift(-1))
     new_df.to_csv(os.getcwd() + datapath + processed_file)
 
 
+    gt_df = get_data(datapath + processed_file)
+    pop = 60000000
+
+    gt_df["beta"] = - (pop*gt_df["delta_suscettibili"] / (gt_df["suscettibili"] * gt_df["totale_positivi"]))
+    gt_df["gamma"] = gt_df["delta_dimessi_guariti"] / gt_df['totale_positivi']
+    gt_df["delta"] = pop*gt_df["delta_deceduti"] / (gt_df["suscettibili"] * gt_df["totale_positivi"]) 
+    gt_df.to_csv(os.getcwd() + datapath + augmented_file)
+    
 if __name__ == "__main__":
     main()

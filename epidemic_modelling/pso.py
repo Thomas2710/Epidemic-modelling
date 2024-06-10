@@ -53,11 +53,9 @@ class MySIRD(Benchmark):
     def get_ird(self):
         infected = self.data["totale_positivi"].values[:]
     def evaluator(self, candidates, args):
-        # TODO: MSE and SIRD integration
-
 
         fitness = []
-
+        time_frame = args.get("time_frame", 1)
         # For the moment we are going to consider only the first 10 weeks
         for current_time in range(0, 10):
             week = current_time
@@ -80,9 +78,7 @@ class MySIRD(Benchmark):
                 init_conditions = {'initial_S': self.population, 'initial_I': infected_t, 'initial_R': recovered_t, 'initial_D': deceased_t}
                 #time_frame is the amount of weeks ahead we want to compute the parameters
                 model.setup(**init_conditions)
-                print('After setup')
-                loss_susceptible, loss_infected, loss_recovered, loss_deceased = model.compute_loss((beta, gamma, delta), time_frame=1)
-                print('After loss')
+                loss_susceptible, loss_infected, loss_recovered, loss_deceased = model.compute_loss((beta, gamma, delta), time_frame=time_frame)
                 # Print losses obtained
                 # print(
                 #     f"Losses: S: {loss_susceptible}, I: {loss_infected}, R: {loss_recovered}, D: {loss_deceased}"
@@ -136,12 +132,15 @@ def main(prng=None, display=True):
     ea.terminator = MySIRD.should_terminate
     ea.topology = topologies.ring_topology
 
+    time_frame = 1
+
     final_pop = ea.evolve(
         generator=problem.generator,
         evaluator=problem.evaluator,
         pop_size=POPULATION_SIZE,
         bounder=problem.bounder,
         maximize=problem.maximize,
+        time_frame = time_frame,
     )
 
     with open(plot_filepath, "r") as f:
