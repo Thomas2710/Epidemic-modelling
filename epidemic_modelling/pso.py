@@ -20,8 +20,8 @@ class Config:
     MAX_GENERATIONS = 1e2
     POPULATION_SIZE = 1e2
     REPETITIONS = 1
-    LAG = 10
-    DAYS = 70
+    LAG = 7
+    DAYS = 21
     PARAMS_THRESHOLD = 0.99
     FACTOR_LOWER_BOUND = 0.001
     FACTOR_UPPER_BOUND = 1.0
@@ -122,6 +122,7 @@ class MySIRD(Benchmark):
         return num_generations >= Config.MAX_GENERATIONS
 
     def get_sird_from_data(self, start_week: int, end_week: int, population: int):
+        start_week = start_week - 1 if start_week > 0 else 0
         infected_t = (
             self.data["totale_positivi"]
             .iloc[start_week:end_week]

@@ -280,18 +280,18 @@ class SIRD:
         actual_S, actual_I, actual_R, actual_D = actual_sird
 
         if loss == "MSE":
-            loss_S = np.mean(computed_S - actual_S) ** 2
-            loss_I = np.mean(computed_I - actual_I) ** 2
-            loss_R = np.mean(computed_R - actual_R) ** 2
-            loss_D = np.mean(computed_D - actual_D) ** 2
+            loss_S = np.sqrt(np.mean(computed_S - actual_S) ** 2)
+            loss_I = np.sqrt(np.mean(computed_I - actual_I) ** 2)
+            loss_R = np.sqrt(np.mean(computed_R - actual_R) ** 2)
+            loss_D = np.sqrt(np.mean(computed_D - actual_D) ** 2)
         else:
             raise NotImplementedError("Only MSE loss is supported")
 
         return loss_S, loss_I, loss_R, loss_D
 
-    def plot(self, ax=None, susceptible=True):
+    def plot(self, ax=None, susceptible=True, lag = 0):
         S, I, R, D = self.soln.y
-        t = self.soln.t
+        t = self.soln.t + lag
         N = self.population
 
         print(f"For a population of {N} people, after {t[-1]:.0f} days there were:")
