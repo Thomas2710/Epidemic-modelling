@@ -184,7 +184,6 @@ class SIRD:
         self: SIRD
             Returns the instance of the class
         """
-
         self.setup(
             initial_conditions["population"],
             initial_conditions["initial_I"],
@@ -204,7 +203,7 @@ class SIRD:
             t_span,
             self.y0,
             args=(self.beta, self.gamma, self.delta),
-            t_eval=np.linspace(0, time_frame, time_frame * 2),
+            t_eval=np.linspace(0, time_frame, time_frame + 1),
         )
         return self
 
@@ -216,7 +215,7 @@ class SIRD:
         ------------
         dict: dictionary containing model parameters
         """
-        params = self.soln.y[:, -1]
+        params = self.soln.y
         params = {
             "S": params[0],
             "I": params[1],
@@ -279,11 +278,14 @@ class SIRD:
         computed_S, computed_I, computed_R, computed_D = computed_sird
         actual_S, actual_I, actual_R, actual_D = actual_sird
 
+        # print(f"Computed {computed_I}, {computed_R}, {computed_D}")
+        # print(f"Actual {actual_I}, {actual_R}, {actual_D}")
+
         if loss == "RMSE":
-            loss_S = np.sqrt(np.mean(computed_S - actual_S) ** 2)
-            loss_I = np.sqrt(np.mean(computed_I - actual_I) ** 2)
-            loss_R = np.sqrt(np.mean(computed_R - actual_R) ** 2)
-            loss_D = np.sqrt(np.mean(computed_D - actual_D) ** 2)
+            loss_S = np.sqrt(np.mean((computed_S - actual_S) ** 2))
+            loss_I = np.sqrt(np.mean((computed_I - actual_I) ** 2))
+            loss_R = np.sqrt(np.mean((computed_R - actual_R) ** 2))
+            loss_D = np.sqrt(np.mean((computed_D - actual_D) ** 2))
         elif loss == "MSE":
             loss_S = np.mean((computed_S - actual_S) ** 2)
             loss_I = np.mean((computed_I - actual_I) ** 2)
@@ -291,6 +293,8 @@ class SIRD:
             loss_D = np.mean((computed_D - actual_D) ** 2)
         else:
             raise NotImplementedError("Only MSE loss is supported")
+
+        # print(f"Loss: {loss_S}, {loss_I}, {loss_R}, {loss_D}")
 
         return loss_I, loss_R, loss_D #, loss_S
 

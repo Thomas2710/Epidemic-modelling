@@ -105,7 +105,7 @@ class MySIRD(Benchmark):
         ]
         partial_losses = []
         args = {}
-        args["fitness_weights"] = [1, 1, 1, 0]
+        args["fitness_weights"] = [1, 1, 1]
         for idx, (beta, gamma, delta) in tqdm(enumerate(candidates)):
             model = SIRD(beta=beta, gamma=gamma, delta=delta)
             # solve
@@ -119,14 +119,12 @@ class MySIRD(Benchmark):
             current_params = [computed_S, computed_I, computed_R, computed_D]
             # Check if the sum of the parameters is valid
             assert (
-                sum_params >= Config.PARAMS_THRESHOLD
+                sum_params.all() >= Config.PARAMS_THRESHOLD
             ), f"Sum of parameters is less than {Config.PARAMS_THRESHOLD}"
 
             # compute loss
             losses = model.compute_loss(current_params, future_params, loss="RMSE")
             partial_losses.append(losses)
-
-            
 
             # Print losses obtained
             # print(
@@ -134,7 +132,7 @@ class MySIRD(Benchmark):
             # )
 
             # loss_normalized = np.mean(losses)
-            fitness.append(Pareto([losses], maximize=False))
+            fitness.append(ParetoLoss(losses, args=args))
             # print(f"Loss normalized: {loss_normalized}")
 
             # fitness.append(loss_normalized)
