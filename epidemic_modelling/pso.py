@@ -8,6 +8,7 @@ import inspyred.ec.terminators
 import numpy as np
 import pandas as pd
 from inspyred import ec
+from inspyred.ec.emo import Pareto
 from inspyred.benchmarks import Benchmark
 from inspyred.swarm import topologies
 from tqdm import tqdm
@@ -17,7 +18,7 @@ from epidemic_modelling.sird_base_model import SIRD
 
 class Config:
     SEED = 42
-    MAX_GENERATIONS = 1e2
+    MAX_GENERATIONS = 1e3
     POPULATION_SIZE = 1e2
     REPETITIONS = 1
     LAG = 7
@@ -27,6 +28,24 @@ class Config:
     FACTOR_UPPER_BOUND = 1.0
     NAME = "baseline"
 
+class ParetoLoss(Pareto):
+    def __init__(self, pareto, args):
+        """ edit this function to change the way that multiple objectives
+        are combined into a single objective
+        
+        """
+        
+        Pareto.__init__(self, pareto)
+        if "fitness_weights" in args :
+            weights = np.asarray(args["fitness_weights"])
+        else : 
+            weights = np.asarray([1 for _ in pareto])
+            
+        self.fitness = sum(np.asarray(pareto * weights))
+        
+    def __lt__(self, other):
+        return self.fitness < other.fitness
+        
 
 class MySIRD(Benchmark):
 
@@ -84,7 +103,9 @@ class MySIRD(Benchmark):
             self.future_conds["initial_R"],
             self.future_conds["initial_D"],
         ]
-
+        partial_losses = []
+        args = {}
+        args["fitness_weights"] = [1, 1, 1, 0]
         for idx, (beta, gamma, delta) in tqdm(enumerate(candidates)):
             model = SIRD(beta=beta, gamma=gamma, delta=delta)
             # solve
@@ -102,18 +123,30 @@ class MySIRD(Benchmark):
             ), f"Sum of parameters is less than {Config.PARAMS_THRESHOLD}"
 
             # compute loss
-            losses = model.compute_loss(current_params, future_params, loss="MSE")
+            losses = model.compute_loss(current_params, future_params, loss="RMSE")
+            partial_losses.append(losses)
+
+            
 
             # Print losses obtained
             # print(
             #     f"Losses: S: {loss_susceptible}, I: {loss_infected}, R: {loss_recovered}, D: {loss_deceased}"
             # )
 
-            loss_normalized = np.mean(losses)
+            # loss_normalized = np.mean(losses)
+            fitness.append(Pareto([losses], maximize=False))
             # print(f"Loss normalized: {loss_normalized}")
 
-            fitness.append(loss_normalized)
+            # fitness.append(loss_normalized)
             # print(f"\nFitness: {loss_normalized}\n")
+        # print(f"Min fit: {min(fitness)}, max fit: {max(fitness)}")
+        # min_fit = (min(partial_losses))
+        # max_fit = (max(partial_losses))
+        # print(f"MIN: Losses: I: {min_fit[0]}, R: {min_fit[1]}, D: {min_fit[2]}, S: {min_fit[3]}")
+        # print(f"MAX: Losses: I: {max_fit[0]}, R: {max_fit[1]}, D: {max_fit[2]}, S: {max_fit[3]}")
+        # print(f"Fitness: {fitness}")
+        print(f"Max fitness: {max(fitness)}")
+        print(f"Min fitness: {min(fitness)}")
         self.epoch += 1
         return fitness
 
@@ -165,13 +198,15 @@ class MySIRD(Benchmark):
             script_dir, f"../data/solutions/{Config.NAME}.csv"
         )
 
+        # best = min(final_pop, key=lambda x: x.fitness)
+        print(f"Final pop: {final_pop}")
         best = min(final_pop, key=lambda x: x.fitness)
 
         with open(best_solution_filepath, "a+") as f:
             if f.tell() == 0:
-                f.write("beta,gamma,delta,fittness\n")
+                f.write("beta,gamma,delta\n")
             f.write(
-                f"{best.candidate[0]},{best.candidate[1]},{best.candidate[2]},{best.fitness}\n"
+                f"{best.candidate[0]},{best.candidate[1]},{best.candidate[2]}\n"
             )
 
         if display:
@@ -219,7 +254,7 @@ def main(display, baseline, shorter_weeks, prng):
         # Defining the 3 parameters to optimize
         ea = inspyred.swarm.PSO(prng)
         ea.terminator = problem.should_terminate
-        ea.topology = topologies.ring_topology
+        ea.topology = topologies.star_topology
 
         final_pop = ea.evolve(
             generator=problem.generator,
@@ -229,6 +264,7 @@ def main(display, baseline, shorter_weeks, prng):
             maximize=problem.maximize,
         )
 
+        
         problem.save_best_solution(final_pop, display)
 
         Config.LAG += Config.DAYS

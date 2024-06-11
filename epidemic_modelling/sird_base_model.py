@@ -259,7 +259,7 @@ class SIRD:
             "Sum params:": sum(params),
         }
 
-    def compute_loss(self, computed_sird: list, actual_sird: list, loss: str = "MSE"):
+    def compute_loss(self, computed_sird: list, actual_sird: list, loss: str = "RMSE"):
         """
         Compute the MSE
 
@@ -279,15 +279,20 @@ class SIRD:
         computed_S, computed_I, computed_R, computed_D = computed_sird
         actual_S, actual_I, actual_R, actual_D = actual_sird
 
-        if loss == "MSE":
+        if loss == "RMSE":
             loss_S = np.sqrt(np.mean(computed_S - actual_S) ** 2)
             loss_I = np.sqrt(np.mean(computed_I - actual_I) ** 2)
             loss_R = np.sqrt(np.mean(computed_R - actual_R) ** 2)
             loss_D = np.sqrt(np.mean(computed_D - actual_D) ** 2)
+        elif loss == "MSE":
+            loss_S = np.mean((computed_S - actual_S) ** 2)
+            loss_I = np.mean((computed_I - actual_I) ** 2)
+            loss_R = np.mean((computed_R - actual_R) ** 2)
+            loss_D = np.mean((computed_D - actual_D) ** 2)
         else:
             raise NotImplementedError("Only MSE loss is supported")
 
-        return loss_S, loss_I, loss_R, loss_D
+        return loss_I, loss_R, loss_D #, loss_S
 
     def plot(self, ax=None, susceptible=True, lag = 0):
         S, I, R, D = self.soln.y
