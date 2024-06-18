@@ -296,7 +296,7 @@ class SIRD:
 
         # print(f"Loss: {loss_S}, {loss_I}, {loss_R}, {loss_D}")
 
-        return loss_I, loss_R, loss_D #, loss_S
+        return loss_I, loss_R, loss_D, loss_S
 
     def plot(self, ax=None, susceptible=True, lag = 0):
         S, I, R, D = self.soln.y

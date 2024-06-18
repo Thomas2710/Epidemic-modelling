@@ -27,6 +27,11 @@ class BaseConfig:
         self.FACTOR_LOWER_BOUND = 0.001
         self.FACTOR_UPPER_BOUND = 1.0
 
+        self.weight_S = 0.8
+        self.weight_I = 7
+        self.weight_R = 0.2
+        self.weight_D = 0.2
+
 class BaselineConfig(BaseConfig):
     
     def __init__(self) -> None:
@@ -39,9 +44,9 @@ class TimeVaryingConfig(BaseConfig):
     
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 4
+        self.SEGMENTS = 2 
         self.NAME = "time_varying"
-        self.DAYS = 14
+        self.DAYS = 28
 
 class ParetoLoss(Pareto):
     def __init__(self, pareto, args):
@@ -121,7 +126,7 @@ class MyPSO(Benchmark):
         ]
         partial_losses = []
         args = {}
-        args["fitness_weights"] = [1, 1, 1]
+        args["fitness_weights"] = [self.MyConfig.weight_S, self.MyConfig.weight_I, self.MyConfig.weight_R, self.MyConfig.weight_D] 
         for beta, gamma, delta in candidates:
             model = SIRD(beta=beta, gamma=gamma, delta=delta)
             # solve
