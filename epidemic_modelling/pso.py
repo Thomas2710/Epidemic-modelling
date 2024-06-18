@@ -11,7 +11,6 @@ from inspyred import ec
 from inspyred.ec.emo import Pareto
 from inspyred.benchmarks import Benchmark
 from inspyred.swarm import topologies
-from tqdm import tqdm
 
 from epidemic_modelling.sird_base_model import SIRD
 
@@ -106,7 +105,7 @@ class MySIRD(Benchmark):
         partial_losses = []
         args = {}
         args["fitness_weights"] = [1, 1, 1]
-        for idx, (beta, gamma, delta) in tqdm(enumerate(candidates)):
+        for beta, gamma, delta in candidates:
             model = SIRD(beta=beta, gamma=gamma, delta=delta)
             # solve
             days = Config.DAYS
@@ -143,13 +142,13 @@ class MySIRD(Benchmark):
         # print(f"MIN: Losses: I: {min_fit[0]}, R: {min_fit[1]}, D: {min_fit[2]}, S: {min_fit[3]}")
         # print(f"MAX: Losses: I: {max_fit[0]}, R: {max_fit[1]}, D: {max_fit[2]}, S: {max_fit[3]}")
         # print(f"Fitness: {fitness}")
-        print(f"Max fitness: {max(fitness)}")
-        print(f"Min fitness: {min(fitness)}")
+        # if self.epoch % 100 == 0:
+        #     print(f"Min fitness: {min(fitness)}")
         self.epoch += 1
         return fitness
 
     def should_terminate(self, population, num_generations, num_evaluations, args):
-        print(f"Generation # {num_generations} ...")
+        print(f"Generation # {num_generations} ...", end="\r")
         return num_generations >= Config.MAX_GENERATIONS
 
     def get_sird_from_data(self, start_week: int, end_week: int, population: int):
@@ -197,7 +196,6 @@ class MySIRD(Benchmark):
         )
 
         # best = min(final_pop, key=lambda x: x.fitness)
-        print(f"Final pop: {final_pop}")
         best = min(final_pop, key=lambda x: x.fitness)
 
         with open(best_solution_filepath, "a+") as f:
@@ -224,19 +222,18 @@ def clean_paths():
 
 @click.command()
 @click.option("--display", default=True, is_flag=True, help="Display the best solution")
-@click.option("--baseline", default=True, is_flag=True, help="Run the baseline")
 @click.option(
-    "--shorter-weeks",
+    "--time-varying",
     default=False,
     is_flag=True,
-    help="Run the baseline with shorter weeks",
+    help="Run the baseline with time-varying parameters",
 )
 @click.option("--prng", default=None, help="Seed for the pseudorandom number generator")
-def main(display, baseline, shorter_weeks, prng):
-    if shorter_weeks:
+def main(display, time_varying, prng):
+    if time_varying:
         Config.DAYS = 7
         Config.REPETITIONS = 10
-        Config.NAME = "shorter_weeks"
+        Config.NAME = "time_varying"
 
     clean_paths()
 
@@ -262,7 +259,6 @@ def main(display, baseline, shorter_weeks, prng):
             maximize=problem.maximize,
         )
 
-        
         problem.save_best_solution(final_pop, display)
 
         Config.LAG += Config.DAYS
