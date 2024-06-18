@@ -33,7 +33,7 @@ class BaselineConfig(BaseConfig):
         super().__init__()
         self.SEGMENTS = 1
         self.NAME = "baseline"
-        self.DAYS = 21
+        self.DAYS = 56
 
 class TimeVaryingConfig(BaseConfig):
     
