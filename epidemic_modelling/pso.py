@@ -12,6 +12,8 @@ from inspyred.ec.emo import Pareto
 from inspyred.benchmarks import Benchmark
 from inspyred.swarm import topologies
 from tqdm import tqdm
+from epidemic_modelling.dataset import TimeSeriesDataset
+
 from epidemic_modelling.sird_base_model import SIRD
 
 
@@ -44,9 +46,9 @@ class TimeVaryingConfig(BaseConfig):
     
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 2 
+        self.SEGMENTS = 170
         self.NAME = "time_varying"
-        self.DAYS = 28
+        self.DAYS = 7
 
 class ParetoLoss(Pareto):
     def __init__(self, pareto, args):
@@ -71,10 +73,10 @@ class MyPSO(Benchmark):
 
     def __init__(self, dimensions=3, config: BaseConfig = None):
         Benchmark.__init__(self, dimensions)
-        self.MyConfig = config
+        self.config = config
         self.bounder = ec.Bounder(
-            [self.MyConfig.FACTOR_LOWER_BOUND] * self.dimensions,
-            self.MyConfig.FACTOR_UPPER_BOUND * self.dimensions,
+            [self.config.FACTOR_LOWER_BOUND] * self.dimensions,
+            self.config.FACTOR_UPPER_BOUND * self.dimensions,
         )
         self.maximize = False
         # self.global_optimum = [0 for _ in range(self.dimensions)]
@@ -85,12 +87,12 @@ class MyPSO(Benchmark):
         self.data = pd.read_csv(filepath)
         self.population = 60_000_000
         self.epoch = 0
-        random.seed = self.MyConfig.SEED
+        random.seed = self.config.SEED
 
     def generator(self, random, args):
         # Generate an initial random candidate for each dimension
         x = [
-            random.uniform(self.MyConfig.FACTOR_LOWER_BOUND, self.MyConfig.FACTOR_UPPER_BOUND)
+            random.uniform(self.config.FACTOR_LOWER_BOUND, self.config.FACTOR_UPPER_BOUND)
             for _ in range(self.dimensions)
         ]
         return x
@@ -109,10 +111,10 @@ class MyPSO(Benchmark):
     def setup(self):
         # For the moment we are going to consider only the first 10 weeks
         self.initial_conds, _ = self.get_sird_from_data(
-            self.MyConfig.LAG, self.MyConfig.DAYS + self.MyConfig.LAG, self.population
+            self.config.LAG, self.config.DAYS + self.config.LAG, self.population
         )
         _, self.future_conds = self.get_sird_from_data(
-            self.MyConfig.LAG + 1, self.MyConfig.DAYS + self.MyConfig.LAG + 1, self.population
+            self.config.LAG + 1, self.config.DAYS + self.config.LAG + 1, self.population
         )
 
     def evaluator(self, candidates, args):
@@ -126,11 +128,11 @@ class MyPSO(Benchmark):
         ]
         partial_losses = []
         args = {}
-        args["fitness_weights"] = [self.MyConfig.weight_S, self.MyConfig.weight_I, self.MyConfig.weight_R, self.MyConfig.weight_D] 
+        args["fitness_weights"] = [self.config.weight_S, self.config.weight_I, self.config.weight_R, self.config.weight_D] 
         for beta, gamma, delta in candidates:
             model = SIRD(beta=beta, gamma=gamma, delta=delta)
             # solve
-            days = self.MyConfig.DAYS
+            days = self.config.DAYS
             # pickup GT
             model.solve(self.initial_conds, days)
             # Values obtained
@@ -140,8 +142,8 @@ class MyPSO(Benchmark):
             current_params = [computed_S, computed_I, computed_R, computed_D]
             # Check if the sum of the parameters is valid
             assert (
-                sum_params.all() >= self.MyConfig.PARAMS_THRESHOLD
-            ), f"Sum of parameters is less than {self.MyConfig.PARAMS_THRESHOLD}"
+                sum_params.all() >= self.config.PARAMS_THRESHOLD
+            ), f"Sum of parameters is less than {self.config.PARAMS_THRESHOLD}"
 
             # compute loss
             losses = model.compute_loss(current_params, future_params, loss="RMSE")
@@ -171,7 +173,7 @@ class MyPSO(Benchmark):
 
     def should_terminate(self, population, num_generations, num_evaluations, args):
         print(f"Generation # {num_generations} ...", end="\r")
-        return num_generations >= self.MyConfig.MAX_GENERATIONS
+        return num_generations >= self.config.MAX_GENERATIONS
 
     def get_sird_from_data(self, start_week: int, end_week: int, population: int):
         start_week = start_week - 1 if start_week > 0 else 0
@@ -214,7 +216,7 @@ class MyPSO(Benchmark):
         if not os.path.exists(os.path.join(script_dir, "../data/solutions")):
             os.makedirs(os.path.join(script_dir, "../data/solutions"))
         best_solution_filepath = os.path.join(
-            script_dir, f"../data/solutions/{self.MyConfig.NAME}.csv"
+            script_dir, f"../data/solutions/{self.config.NAME}.csv"
         )
 
         # best = min(final_pop, key=lambda x: x.fitness)
@@ -229,6 +231,7 @@ class MyPSO(Benchmark):
 
         if display:
             print(f"Best solution: {best.candidate} with fitness: {best.fitness}")
+
 
 
 def clean_paths(config):
@@ -276,14 +279,14 @@ def main(display, time_varying, prng):
         final_pop = ea.evolve(
             generator=problem.generator,
             evaluator=problem.evaluator,
-            pop_size=problem.MyConfig.POPULATION_SIZE,
+            pop_size=problem.config.POPULATION_SIZE,
             bounder=problem.bounder,
             maximize=problem.maximize,
         )
 
         problem.save_best_solution(final_pop, display)
+    
 
-        problem.MyConfig.LAG += problem.MyConfig.DAYS
 
     # # Write on csv the best solution
     # best_solution_filepath = os.path.join(script_dir, "../data/best_solution.csv")
