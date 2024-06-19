@@ -12,13 +12,11 @@ from inspyred.ec.emo import Pareto
 from inspyred.benchmarks import Benchmark
 from inspyred.swarm import topologies
 from tqdm import tqdm
-from epidemic_modelling.dataset import TimeSeriesDataset
 
 from epidemic_modelling.sird_base_model import SIRD
 
 
 class BaseConfig:
-
     def __init__(self) -> None:
         self.SEED = 42
         self.MAX_GENERATIONS = 4e2
@@ -34,43 +32,50 @@ class BaseConfig:
         self.weight_R = 0.2
         self.weight_D = 0.2
 
+
 class BaselineConfig(BaseConfig):
-    
     def __init__(self) -> None:
         super().__init__()
         self.SEGMENTS = 1
         self.NAME = "baseline"
         self.DAYS = 56
 
+
 class TimeVaryingConfig(BaseConfig):
-    
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 170
+        self.SEGMENTS = 2
         self.NAME = "time_varying"
+        self.DAYS = 28
+
+class LSTMConfig(BaseConfig):
+    def __init__(self) -> None:
+        super().__init__()
+        self.SEGMENTS = 170 # or 219
+        self.NAME = "lstm"
         self.DAYS = 7
+
 
 class ParetoLoss(Pareto):
     def __init__(self, pareto, args):
-        """ edit this function to change the way that multiple objectives
+        """edit this function to change the way that multiple objectives
         are combined into a single objective
-        
+
         """
-        
+
         Pareto.__init__(self, pareto)
-        if "fitness_weights" in args :
+        if "fitness_weights" in args:
             weights = np.asarray(args["fitness_weights"])
-        else : 
+        else:
             weights = np.asarray([1 for _ in pareto])
-            
+
         self.fitness = sum(np.asarray(pareto * weights))
-        
+
     def __lt__(self, other):
         return self.fitness < other.fitness
-        
+
 
 class MyPSO(Benchmark):
-
     def __init__(self, dimensions=3, config: BaseConfig = None):
         Benchmark.__init__(self, dimensions)
         self.config = config
@@ -128,7 +133,12 @@ class MyPSO(Benchmark):
         ]
         partial_losses = []
         args = {}
-        args["fitness_weights"] = [self.config.weight_S, self.config.weight_I, self.config.weight_R, self.config.weight_D] 
+        args["fitness_weights"] = [
+            self.config.weight_S,
+            self.config.weight_I,
+            self.config.weight_R,
+            self.config.weight_D,
+        ]
         for beta, gamma, delta in candidates:
             model = SIRD(beta=beta, gamma=gamma, delta=delta)
             # solve
@@ -225,19 +235,16 @@ class MyPSO(Benchmark):
         with open(best_solution_filepath, "a+") as f:
             if f.tell() == 0:
                 f.write("beta,gamma,delta\n")
-            f.write(
-                f"{best.candidate[0]},{best.candidate[1]},{best.candidate[2]}\n"
-            )
+            f.write(f"{best.candidate[0]},{best.candidate[1]},{best.candidate[2]}\n")
 
         if display:
             print(f"Best solution: {best.candidate} with fitness: {best.fitness}")
 
 
-
 def clean_paths(config):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     if not os.path.exists(os.path.join(script_dir, "../data/solutions")):
-            os.makedirs(os.path.join(script_dir, "../data/solutions"))
+        os.makedirs(os.path.join(script_dir, "../data/solutions"))
     best_solution_filepath = os.path.join(
         script_dir, f"../data/solutions/{config.NAME}.csv"
     )
@@ -253,10 +260,18 @@ def clean_paths(config):
     is_flag=True,
     help="Run the baseline with time-varying parameters",
 )
+@click.option(
+    "--lstm",
+    default=False,
+    is_flag=True,
+    help="Run the baseline with LSTM parameters",
+)
 @click.option("--prng", default=None, help="Seed for the pseudorandom number generator")
-def main(display, time_varying, prng):
+def main(display, time_varying, lstm, prng):
     if time_varying:
         config = TimeVaryingConfig()
+    elif lstm:
+        config = LSTMConfig()
     else:
         config = BaselineConfig()
 
@@ -285,8 +300,8 @@ def main(display, time_varying, prng):
         )
 
         problem.save_best_solution(final_pop, display)
-    
-
+        
+        config.LAG += config.DAYS
 
     # # Write on csv the best solution
     # best_solution_filepath = os.path.join(script_dir, "../data/best_solution.csv")
