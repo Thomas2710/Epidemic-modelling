@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 import os
 
@@ -125,9 +124,9 @@ def main():
     daily_df.set_index(np.arange(len(daily_df)), inplace=True)
     daily_df.to_csv(os.getcwd() + datapath + daily_processed_file)
 
-    total_positives = df["totale_positivi"].resample("W").last()
-    recovered = df["dimessi_guariti"].resample("W").last()
-    deaths = df["deceduti"].resample("W").last()
+    total_positives = df["totale_positivi"]
+    recovered = df["dimessi_guariti"]
+    deaths = df["deceduti"]
 
     # replace date with 0 indexed integer
     new_df = pd.DataFrame(

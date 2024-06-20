@@ -8,7 +8,9 @@ def main():
     config = LSTMConfig()
 
     dataset = TimeSeriesDataset.load_data(config)
-    sequences, labels = TimeSeriesDataset.preprocess_data(dataset, 3, 1)
+    sequences, labels = TimeSeriesDataset.preprocess_data(
+        dataset, input_length=config.IN_DAYS, target_length=config.OUT_DAYS
+    )
     TimeSeriesDataset.split_data(sequences, labels)
 
     model = LSTMModel()

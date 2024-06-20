@@ -19,7 +19,7 @@ from epidemic_modelling.sird_base_model import SIRD
 class BaseConfig:
     def __init__(self) -> None:
         self.SEED = 42
-        self.MAX_GENERATIONS = 4e2
+        self.MAX_GENERATIONS = 3e2
         self.POPULATION_SIZE = 1e2
         self.LAG = 0
 
@@ -27,10 +27,10 @@ class BaseConfig:
         self.FACTOR_LOWER_BOUND = 0.001
         self.FACTOR_UPPER_BOUND = 1.0
 
-        self.weight_S = 0.8
-        self.weight_I = 7
-        self.weight_R = 0.2
-        self.weight_D = 0.2
+        self.weight_S = 0
+        self.weight_I = 1
+        self.weight_R = 1
+        self.weight_D = 1
 
 
 class BaselineConfig(BaseConfig):
@@ -44,16 +44,19 @@ class BaselineConfig(BaseConfig):
 class TimeVaryingConfig(BaseConfig):
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 2
+        self.SEGMENTS = 52
         self.NAME = "time_varying"
-        self.DAYS = 28
+        self.DAYS = 7
+
 
 class LSTMConfig(BaseConfig):
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 170 # or 219
+        self.SEGMENTS = 170  # or 219
         self.NAME = "lstm"
         self.DAYS = 7
+        self.IN_DAYS = 14
+        self.OUT_DAYS = 14
 
 
 class ParetoLoss(Pareto):
@@ -97,7 +100,9 @@ class MyPSO(Benchmark):
     def generator(self, random, args):
         # Generate an initial random candidate for each dimension
         x = [
-            random.uniform(self.config.FACTOR_LOWER_BOUND, self.config.FACTOR_UPPER_BOUND)
+            random.uniform(
+                self.config.FACTOR_LOWER_BOUND, self.config.FACTOR_UPPER_BOUND
+            )
             for _ in range(self.dimensions)
         ]
         return x
@@ -264,7 +269,7 @@ def clean_paths(config):
     "--lstm",
     default=False,
     is_flag=True,
-    help="Run the baseline with LSTM parameters",
+    help="Run the baseline with LSTM parameter  s",
 )
 @click.option("--prng", default=None, help="Seed for the pseudorandom number generator")
 def main(display, time_varying, lstm, prng):
@@ -300,7 +305,7 @@ def main(display, time_varying, lstm, prng):
         )
 
         problem.save_best_solution(final_pop, display)
-        
+
         config.LAG += config.DAYS
 
     # # Write on csv the best solution
