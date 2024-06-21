@@ -34,7 +34,7 @@ class LSTMModel(pl.LightningModule):
         predictions = self.linear(last_time_step)
         self.sird.setup(predictions[:, 0], predictions[:, 1], predictions[:, 2])
         sird_info = sird_info
-        sol = odeint(self.sird, sird_info, torch.linspace(0, self.offset, self.offset))
+        sol = odeint(self.sird, sird_info, torch.linspace(0, self.offset, self.offset + 1))
         return sol[-1]
 
         # runno il sird con questi parametri
@@ -54,7 +54,7 @@ class LSTMModel(pl.LightningModule):
         sequences, labels, sird_initial, sird_final = batch
         y_pred = self(sequences, sird_initial.float())
         loss = self.criterion(y_pred[1:], sird_final.float()[1:])
-        self.log("test_loss", loss, on_step=True)
+        self.log("test_loss", loss)
         return loss
 
     def configure_optimizers(self):
