@@ -3559,6 +3559,21 @@ opt-einsum = ["opt-einsum (>=3.3)"]
 optree = ["optree (>=0.9.1)"]
 
 [[package]]
+name = "torchdiffeq"
+version = "0.2.4"
+description = "ODE solvers and adjoint sensitivity analysis in PyTorch."
+optional = false
+python-versions = "~=3.6"
+files = [
+    {file = "torchdiffeq-0.2.4-py3-none-any.whl", hash = "sha256:70b7e5afb373af0aded660588aaeb63c2a56c7064ae7c3037ffc12a1bad16b28"},
+    {file = "torchdiffeq-0.2.4.tar.gz", hash = "sha256:c0e57c3c889fedda7f23a6015dbfcd6dae5072a06dd6ed10e8200c2009844043"},
+]
+
+[package.dependencies]
+scipy = ">=1.4.0"
+torch = ">=1.5.0"
+
+[[package]]
 name = "torchmetrics"
 version = "1.4.0.post0"
 description = "PyTorch native Metrics"
@@ -3899,4 +3914,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "f8d94643ef1b841d432e3d68765279cfc8b67842ba102fe483b988caf7165ff6"
+content-hash = "64a3fda7781b6357b9921215cf8d893b9390c985dbbd492f6c1b772b215fec74"

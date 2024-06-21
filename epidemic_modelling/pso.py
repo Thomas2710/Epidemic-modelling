@@ -55,8 +55,8 @@ class LSTMConfig(BaseConfig):
         self.SEGMENTS = 170  # or 219
         self.NAME = "lstm"
         self.DAYS = 7
-        self.IN_DAYS = 14
-        self.OUT_DAYS = 14
+        self.IN_DAYS = 3
+        self.OUT_DAYS = 1
 
 
 class ParetoLoss(Pareto):
