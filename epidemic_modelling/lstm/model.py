@@ -19,24 +19,25 @@ class LSTMModel(pl.LightningModule):
         self.sird = SIRD(60e6)
         self.criterion = nn.MSELoss()
 
-    def forward(self, input_seq, sird_info):
+    def forward(self, starting_params, original_sird):
         # TODO:
         # load params beta, gamma,delta
         # RUN SIRD FOR 1 WEEK
         # Compare computed S,I,R,D values with the real ones
 
-        # shape of input_seq: (batch_size, seq_len, feature_size)
+        # shape of starting_params: (batch_size, seq_len, feature_size)
 
-        lstm_out, _ = self.lstm(input_seq)
+        lstm_out, _ = self.lstm(starting_params)
         last_time_step = lstm_out[:, -1, :]
         predictions = self.linear(last_time_step)
-        self.sird.setup(predictions[:, 0], predictions[:, 1], predictions[:, 2])
-        sird_info = sird_info
+        self.sird.setup(predictions[:, 0], predictions[:, 1], predictions[:, 2])        
+        # original_sird[:,0,:] -> starting SIRD values
+                    
         sol = odeint(
-            self.sird, sird_info, torch.linspace(0, self.offset, self.offset + 1)
+            self.sird, original_sird[:,0,:], torch.linspace(1, self.offset, self.offset + 1)
         )
         # TODO: return all solutions
-        return sol[-1]
+        return sol, predictions
 
         # runno il sird con questi parametri
         # calcolo la loss di S I R D?
@@ -45,17 +46,19 @@ class LSTMModel(pl.LightningModule):
         # return predictions.unsqueeze(1)
 
     def training_step(self, batch, batch_idx):
-        sequences, _, sird_initial, sird_final = batch
-        y_pred = self(sequences, sird_initial.float())
-        # TODO: check on what are you using the loss -> all S,I,R,D computed vals vs real ones
-        loss = self.criterion(y_pred[1:], sird_final.float()[1:])
+        starting_params, original_sird = batch
+        y_pred, _ = self(starting_params, original_sird.float())
+        # shape 0 is batch size
+        # shape 1 is the number of days (1: is to skip the first day that has the same values of the original SIRD)
+        # shape 2 is the number of features (S,I,R,D) (1: is to skip S)
+        loss = self.criterion(y_pred[:, :, 1:], original_sird[:, :, 1:].float())
         self.log("train_loss", loss)
         return loss
 
     def test_step(self, batch, batch_idx):
-        sequences, labels, sird_initial, sird_final = batch
-        y_pred = self(sequences, sird_initial.float())
-        loss = self.criterion(y_pred[1:], sird_final.float()[1:])
+        starting_params, original_sird = batch
+        y_pred, _ = self(starting_params, original_sird.float())
+        loss = self.criterion(y_pred[:, 1:, 1:], original_sird[:, 1:, 1:].float())
         self.log("test_loss", loss)
         return loss
 
@@ -80,25 +83,21 @@ class SIRD(nn.Module):
         self.delta = None
 
     def setup(self, beta, gamma, delta):
-        self.beta = beta
-        self.gamma = gamma
-        self.delta = delta
+        self.beta = beta.unsqueeze(1)
+        self.gamma = gamma.unsqueeze(1)
+        self.delta = delta.unsqueeze(1)
 
     def forward(self, t, y):
         return self._get_eqns(y)
 
     def _get_eqns(self, y):
-        # shape is [8,1,4], i want to split it into 4 tensors (innermost dimension)
-        S, I, R, D = torch.split(y, 1, dim=2)
-        S = S.squeeze()
-        I = I.squeeze()
-        R = R.squeeze()
-        D = D.squeeze()
+        # shape is [8,4], i want to split it into 4 tensors (innermost dimension)
+        S, I, R, D = torch.split(y, 1, dim=1)
         N = self.population
         dSdt = -self.beta * S * I / N
         dIdt = (self.beta * S * I - self.gamma * I - self.delta * I) / N
         dRdt = self.gamma * I / N
         dDdt = self.delta * I / N
-        # convert [8], [8], [8], [8] to [8,1,4]
-        stack = torch.stack([dSdt, dIdt, dRdt, dDdt], dim=1).unsqueeze(1)
+        # convert [8,1][8,1][8,1][8,1] to [8,4]
+        stack = torch.stack([dSdt, dIdt, dRdt, dDdt], dim=1).squeeze(2)
         return stack

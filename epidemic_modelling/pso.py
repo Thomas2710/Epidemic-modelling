@@ -1,18 +1,20 @@
 import os
 import random
-from random import Random
 
 import click
 import inspyred
-import inspyred.ec.terminators
 import numpy as np
 import pandas as pd
+import torch
 from inspyred import ec
 from inspyred.ec.emo import Pareto
 from inspyred.benchmarks import Benchmark
 from inspyred.swarm import topologies
 from tqdm import tqdm
 
+from epidemic_modelling.lstm.dataset import TimeSeriesDataset
+from epidemic_modelling.lstm.main import train
+from epidemic_modelling.lstm.model import LSTMModel
 from epidemic_modelling.sird_base_model import SIRD
 
 
@@ -54,12 +56,12 @@ class LSTMConfig(BaseConfig):
         super().__init__()
         self.EPOCHS = 200
         self.LOG_EVERY_N_STEPS = 5
-        self.SEGMENTS = 8  # or 219
-        self.NAME = "lstm"
-        self.DAYS = 14
-        # TODO: change to IN/OUT_WEEK -> 1
-        self.IN_DAYS = 7
-        self.OUT_DAYS = 7
+        self.SEGMENTS = 170
+        self.PRE = "time_varying_pre_lstm"
+        self.POST = "time_varying_post_lstm"
+        self.DAYS = 7
+        self.IN_WEEKS = 1
+        self.OUT_WEEKS = 1
 
 
 class ParetoLoss(Pareto):
@@ -230,11 +232,12 @@ class MyPSO(Benchmark):
         return initial_conds, all_conds
 
     def save_best_solution(self, final_pop, display=True):
+        file_path = getattr(self.config, "PRE", getattr(self.config, "NAME", None))
         script_dir = os.path.dirname(os.path.abspath(__file__))
         if not os.path.exists(os.path.join(script_dir, "../data/solutions")):
             os.makedirs(os.path.join(script_dir, "../data/solutions"))
         best_solution_filepath = os.path.join(
-            script_dir, f"../data/solutions/{self.config.NAME}.csv"
+            script_dir, f"../data/solutions/{file_path}.csv"
         )
 
         # best = min(final_pop, key=lambda x: x.fitness)
@@ -250,15 +253,25 @@ class MyPSO(Benchmark):
 
 
 def clean_paths(config):
+    file_path = getattr(config, "PRE", getattr(config, "NAME", None))
     script_dir = os.path.dirname(os.path.abspath(__file__))
     if not os.path.exists(os.path.join(script_dir, "../data/solutions")):
         os.makedirs(os.path.join(script_dir, "../data/solutions"))
     best_solution_filepath = os.path.join(
-        script_dir, f"../data/solutions/{config.NAME}.csv"
+        script_dir, f"../data/solutions/{file_path}.csv"
     )
     if os.path.exists(best_solution_filepath):
         os.remove(best_solution_filepath)
 
+def save_post(config, params_collection):
+    file_path = config.POST
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    post_file_path = os.path.join(script_dir, f"../data/solutions/{file_path}.csv")
+    if os.path.exists(post_file_path):
+        os.remove(post_file_path)
+    # set header to beta, gamma, delta
+    params_collection.to_csv(post_file_path, index=False, header=["beta", "gamma", "delta"])
+    
 
 @click.command()
 @click.option("--display", default=True, is_flag=True, help="Display the best solution")
@@ -292,7 +305,7 @@ def main(display, time_varying, lstm, prng):
     else:
         config = BaselineConfig()
 
-    print(f"Running {config.NAME} configuration")
+    print(f"Running {config.__class__.__name__} configuration")
     clean_paths(config)
 
     for _ in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
@@ -301,7 +314,7 @@ def main(display, time_varying, lstm, prng):
 
         # Initialization of pseudorandom number generator
         if prng is None:
-            prng = Random()
+            prng = random.Random()
             prng.seed(config.SEED)
 
         # Defining the 3 parameters to optimize
@@ -321,14 +334,29 @@ def main(display, time_varying, lstm, prng):
 
         config.LAG += config.DAYS
 
-    # # Write on csv the best solution
-    # best_solution_filepath = os.path.join(script_dir, "../data/best_solution.csv")
-    # with open(best_solution_filepath, "w") as f:
-    #     f.write("beta,gamma,delta\n")
-    #     f.write(f"{best.candidate[0]},{best.candidate[1]},{best.candidate[2]}\n")
-    #
-    # return ea
+    if lstm:
+        train(config)
+        model = LSTMModel.load_from_checkpoint("lstm_model.ckpt")
+        model.eval()
+        params, sird = TimeSeriesDataset.load_data(config)
+        params = params[0]
+        sird = sird[0]
+        # add row with params and title beta, gamma, delta
+        params_collection = pd.DataFrame(params).T
+        # run inference
+        for i in range(14):
+            sird_tensor = torch.tensor(sird, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+            params_tensor = torch.tensor(params, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+            # run inference
+            sird, params = model(params_tensor, sird_tensor)
+            params = params.squeeze().detach().tolist()
+            sird = sird[-1].squeeze().detach().tolist()
+            params_collection = pd.concat([params_collection, pd.DataFrame(params).T])
 
+        # save output in time_varying_post_lstm.csv
+        save_post(config, params_collection)
+
+        
 
 if __name__ == "__main__":
     main()
