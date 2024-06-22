@@ -14,7 +14,9 @@ def main():
     TimeSeriesDataset.split_data(sequences, labels, sird_initial, sird_final)
 
     model = LSTMModel()
-    trainer = Trainer(max_epochs=200, log_every_n_steps=5)
+    trainer = Trainer(
+        max_epochs=config.EPOCHS, log_every_n_steps=config.LOG_EVERY_N_STEPS
+    )
     trainer.fit(model, model.train_dataloader())
     trainer.test(model, model.test_dataloader())
 

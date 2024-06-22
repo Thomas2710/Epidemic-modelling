@@ -18,23 +18,24 @@ class LSTMModel(pl.LightningModule):
         self.linear = nn.Linear(hidden_layer_size, output_size)
         self.sird = SIRD(60e6)
         self.criterion = nn.MSELoss()
- 
+
     def forward(self, input_seq, sird_info):
+        # TODO:
+        # load params beta, gamma,delta
+        # RUN SIRD FOR 1 WEEK
+        # Compare computed S,I,R,D values with the real ones
+
         # shape of input_seq: (batch_size, seq_len, feature_size)
-
-        # input: prende parametri
-        # SIRD : runna una sim per tot giorni
-        # out: S I R D di quei gfiorni
-        # loss.backward -> update parametri
-
-        # TOT PARAMETREUI/SIRD/STOCAZZO IN -> TOT QUALCOSA OUT
 
         lstm_out, _ = self.lstm(input_seq)
         last_time_step = lstm_out[:, -1, :]
         predictions = self.linear(last_time_step)
         self.sird.setup(predictions[:, 0], predictions[:, 1], predictions[:, 2])
         sird_info = sird_info
-        sol = odeint(self.sird, sird_info, torch.linspace(0, self.offset, self.offset + 1))
+        sol = odeint(
+            self.sird, sird_info, torch.linspace(0, self.offset, self.offset + 1)
+        )
+        # TODO: return all solutions
         return sol[-1]
 
         # runno il sird con questi parametri
@@ -44,8 +45,9 @@ class LSTMModel(pl.LightningModule):
         # return predictions.unsqueeze(1)
 
     def training_step(self, batch, batch_idx):
-        sequences, labels, sird_initial, sird_final = batch
+        sequences, _, sird_initial, sird_final = batch
         y_pred = self(sequences, sird_initial.float())
+        # TODO: check on what are you using the loss -> all S,I,R,D computed vals vs real ones
         loss = self.criterion(y_pred[1:], sird_final.float()[1:])
         self.log("train_loss", loss)
         return loss
@@ -58,36 +60,33 @@ class LSTMModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.001)
+        return torch.optim.AdamW(self.parameters(), lr=0.001, weight_decay=0.01)
 
     def train_dataloader(self):
         train_dataset = TimeSeriesDataset.train_dataset
-        return DataLoader(
-            train_dataset, batch_size=8, shuffle=True, num_workers=2
-        )
-        
+        return DataLoader(train_dataset, batch_size=8, shuffle=True, num_workers=2)
+
     def test_dataloader(self):
         test_dataset = TimeSeriesDataset.test_dataset
-        return DataLoader(
-            test_dataset, batch_size=8, shuffle=False, num_workers=2
-        )
+        return DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=2)
+
 
 class SIRD(nn.Module):
     def __init__(self, population):
         super(SIRD, self).__init__()
-        self.population = population      
+        self.population = population
         self.beta = None
         self.gamma = None
         self.delta = None
-    
+
     def setup(self, beta, gamma, delta):
         self.beta = beta
         self.gamma = gamma
         self.delta = delta
-    
+
     def forward(self, t, y):
         return self._get_eqns(y)
-    
+
     def _get_eqns(self, y):
         # shape is [8,1,4], i want to split it into 4 tensors (innermost dimension)
         S, I, R, D = torch.split(y, 1, dim=2)

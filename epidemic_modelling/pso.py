@@ -27,10 +27,10 @@ class BaseConfig:
         self.FACTOR_LOWER_BOUND = 0.001
         self.FACTOR_UPPER_BOUND = 1.0
 
-        self.weight_S = 0
-        self.weight_I = 1
-        self.weight_R = 1
-        self.weight_D = 1
+        self.weight_S = 0.4
+        self.weight_I = 3
+        self.weight_R = 6
+        self.weight_D = 0.6
 
 
 class BaselineConfig(BaseConfig):
@@ -44,7 +44,7 @@ class BaselineConfig(BaseConfig):
 class TimeVaryingConfig(BaseConfig):
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 52
+        self.SEGMENTS = 16
         self.NAME = "time_varying"
         self.DAYS = 7
 
@@ -52,11 +52,14 @@ class TimeVaryingConfig(BaseConfig):
 class LSTMConfig(BaseConfig):
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 170  # or 219
+        self.EPOCHS = 200
+        self.LOG_EVERY_N_STEPS = 5
+        self.SEGMENTS = 8  # or 219
         self.NAME = "lstm"
-        self.DAYS = 7
-        self.IN_DAYS = 3
-        self.OUT_DAYS = 1
+        self.DAYS = 14
+        # TODO: change to IN/OUT_WEEK -> 1
+        self.IN_DAYS = 7
+        self.OUT_DAYS = 7
 
 
 class ParetoLoss(Pareto):
@@ -276,10 +279,20 @@ def main(display, time_varying, lstm, prng):
     if time_varying:
         config = TimeVaryingConfig()
     elif lstm:
+        # TODO:
+        # When LSTM is chosen
+        # Run time variant approach first, save time_varying_pre_lstm.csv
+        # Run lstm considering time_varying_pre_lstm.csv dataset
+        # Train LSTM
+        # Run inference from first row time_varying_pre_lstm.csv
+        # rows : indays*segments
+        # Save lstm output in time_varying_post_lstm.csv
+        # Plot that shit -> ipynb file -> for i in weeks -> load SIRD module and inference + plot
         config = LSTMConfig()
     else:
         config = BaselineConfig()
 
+    print(f"Running {config.NAME} configuration")
     clean_paths(config)
 
     for _ in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
