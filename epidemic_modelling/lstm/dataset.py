@@ -36,7 +36,7 @@ class TimeSeriesDataset:
         return df_raw.values.tolist(), df_sird.values.tolist()
 
     @staticmethod
-    def preprocess_data(data, sird, input_length, target_length, offset=7):
+    def preprocess_data(data, sird, input_length, target_length, offset=1):
         sequences = [
             data[i : i + input_length] for i in range(len(data) - input_length - offset)
         ]
@@ -53,6 +53,9 @@ class TimeSeriesDataset:
             sird[i + input_length + offset: i + input_length + target_length + offset]
             for i in range(len(data) - input_length - offset)
         ]
+        
+        print(input_length, input_length + target_length)
+        print(input_length + offset, input_length + target_length + offset)
         
         return sequences, labels, sird_initial, sird_final
 
