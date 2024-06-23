@@ -69,7 +69,7 @@ def main():
     country = "Italy"
     datapath = "/data"
     raw_file = "/raw.csv"
-    processed_file = "/processed.csv"
+    processed_file = "/daily_processed1.csv"
     augmented_file = "/augmented.csv"
     daily_processed_file = "/daily_processed.csv"
 
@@ -124,16 +124,19 @@ def main():
     daily_df.set_index(np.arange(len(daily_df)), inplace=True)
     daily_df.to_csv(os.getcwd() + datapath + daily_processed_file)
 
-    total_positives = df["totale_positivi"]
-    recovered = df["dimessi_guariti"]
-    deaths = df["deceduti"]
+    total_positives_t = df['totale_positivi'].cumsum()
+    print(type(total_positives_t))
+    recovered_t = df["dimessi_guariti"]
+    deaths_t = df["deceduti"]
+    total_positives_dt = df["totale_positivi"]
+
 
     # replace date with 0 indexed integer
     new_df = pd.DataFrame(
         {
-            "totale_positivi": total_positives,
-            "dimessi_guariti": recovered,
-            "deceduti": deaths,
+            "totale_positivi": total_positives_dt,
+            "dimessi_guariti": recovered_t,
+            "deceduti": deaths_t,
         },
     )
 
@@ -144,6 +147,9 @@ def main():
         - new_df["dimessi_guariti"]
         - new_df["deceduti"]
     )
+    new_df['total_infected'] = df['totale_positivi'].cumsum()
+    print(len(df['totale_positivi'].cumsum()))
+    print(len(new_df['total_infected']))
     new_df["delta_suscettibili"] = -(
         new_df["suscettibili"] - new_df["suscettibili"].shift(-1)
     )

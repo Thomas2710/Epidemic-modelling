@@ -12,15 +12,17 @@ from inspyred.ec.emo import Pareto
 from inspyred.benchmarks import Benchmark
 from inspyred.swarm import topologies
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from epidemic_modelling.sird_base_model import SIRD
 
+conv = []
 
 class BaseConfig:
     def __init__(self) -> None:
         self.SEED = 42
-        self.MAX_GENERATIONS = 3e2
-        self.POPULATION_SIZE = 1e2
+        self.MAX_GENERATIONS = 5e1
+        self.POPULATION_SIZE = 500
         self.LAG = 0
 
         self.PARAMS_THRESHOLD = 0.99
@@ -31,6 +33,10 @@ class BaseConfig:
         self.weight_I = 1
         self.weight_R = 1
         self.weight_D = 1
+
+        self.cognitive_rate = 1.0
+        self.social_rate = 2.5
+        self.inertia = 0.3
 
 
 class BaselineConfig(BaseConfig):
@@ -44,7 +50,7 @@ class BaselineConfig(BaseConfig):
 class TimeVaryingConfig(BaseConfig):
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 52
+        self.SEGMENTS = 15
         self.NAME = "time_varying"
         self.DAYS = 7
 
@@ -183,6 +189,7 @@ class MyPSO(Benchmark):
         # print(f"Fitness: {fitness}")
         print(f"Max fitness: {max(fitness)}")
         print(f"Min fitness: {min(fitness)}")
+        conv.append(min(fitness).fitness)
         self.epoch += 1
         return fitness
 
@@ -282,7 +289,10 @@ def main(display, time_varying, lstm, prng):
 
     clean_paths(config)
 
-    for _ in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
+    beta_values = []
+    delta_values = []
+    gamma_values = []
+    for seg in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
         problem = MyPSO(3, config)
         problem.setup()
 
@@ -295,16 +305,37 @@ def main(display, time_varying, lstm, prng):
         ea = inspyred.swarm.PSO(prng)
         ea.terminator = problem.should_terminate
         ea.topology = topologies.star_topology
-
+        ea.social_rate = config.social_rate
+        ea.cognitive_rate = config.cognitive_rate
+        ea.inertia = config.inertia
+        
         final_pop = ea.evolve(
             generator=problem.generator,
             evaluator=problem.evaluator,
             pop_size=problem.config.POPULATION_SIZE,
             bounder=problem.bounder,
             maximize=problem.maximize,
+            social_rate=config.social_rate,
+            cognitive_rate=config.cognitive_rate,
+            inertia=config.inertia,
+            neighborhood_size=20
         )
 
         problem.save_best_solution(final_pop, display)
+
+    
+        # Plot the fitness value for each generation to see when it converges
+        start = int(seg*config.MAX_GENERATIONS)
+        end = int(1+(seg+1)*config.MAX_GENERATIONS)
+        x_values = range(start,end)
+        # Plotting the numbers with customizations
+        plt.plot(x_values, conv[start:end], linestyle='--')
+        plt.savefig(os.path.join(os.getcwd(),'convergence', str(seg)+'_conv.png'))
+        # Adding titles and labels
+        plt.title('Plot of Fitness convergence')
+        plt.xlabel('Index')
+        plt.ylabel('Fitness')
+
 
         config.LAG += config.DAYS
 
