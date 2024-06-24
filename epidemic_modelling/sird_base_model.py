@@ -145,7 +145,6 @@ class SIRD:
     def setup(self, population: int, initial_I: int, initial_R: int, initial_D: int):
         # Compute initial values
         self.population = population
-        print(self.population)
         initial_S = (population - initial_I - initial_R - initial_D) / population
         initial_R /= population
         initial_D /= population
@@ -154,7 +153,7 @@ class SIRD:
 
         computed_population = initial_S + initial_I + initial_R + initial_D
         assert (
-            abs(self.population - computed_population) >= ALLOWED_ERROR
+            abs(1.0 - computed_population) <= ALLOWED_ERROR
         ), "Error in the computation of the population!"
         # Coeffs are computed in the __init__ func
 

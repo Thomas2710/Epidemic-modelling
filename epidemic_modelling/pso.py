@@ -5,6 +5,8 @@ import click
 import numpy as np
 import pandas as pd
 import torch
+import inspyred
+from inspyred.swarm import topologies
 from inspyred import ec
 from inspyred.ec.emo import Pareto
 from inspyred.benchmarks import Benchmark
@@ -13,8 +15,12 @@ from epidemic_modelling.lstm.dataset import TimeSeriesDataset
 from epidemic_modelling.lstm.main import train
 from epidemic_modelling.lstm.model import LSTMModel
 from epidemic_modelling.sird_base_model import SIRD
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 
-conv = []
+
+min_conv = []
+max_conv = []
 
 class BaseConfig:
     def __init__(self) -> None:
@@ -27,14 +33,15 @@ class BaseConfig:
         self.FACTOR_LOWER_BOUND = 0.001
         self.FACTOR_UPPER_BOUND = 1.0
 
-        self.weight_S = 0.4
-        self.weight_I = 3
-        self.weight_R = 6
-        self.weight_D = 0.6
+        self.weight_S = 1
+        self.weight_I = 1
+        self.weight_R = 1
+        self.weight_D = 1
 
         self.cognitive_rate = 1.0
         self.social_rate = 2.5
         self.inertia = 0.3
+        self.neighborhood = 3
 
 
 class BaselineConfig(BaseConfig):
@@ -48,7 +55,7 @@ class BaselineConfig(BaseConfig):
 class TimeVaryingConfig(BaseConfig):
     def __init__(self) -> None:
         super().__init__()
-        self.SEGMENTS = 15
+        self.SEGMENTS = 8
         self.NAME = "time_varying"
         self.DAYS = 7
 
@@ -190,7 +197,8 @@ class MyPSO(Benchmark):
         # print(f"Fitness: {fitness}")
         # print(f"Max fitness: {max(fitness)}")
         # print(f"Min fitness: {min(fitness)}")
-        conv.append(min(fitness).fitness)
+        min_conv.append(min(fitness).fitness)
+        max_conv.append(max(fitness).fitness)
         self.epoch += 1
         return fitness
 
@@ -314,52 +322,70 @@ def main(display, time_varying, lstm, prng):
     beta_values = []
     delta_values = []
     gamma_values = []
-    # for seg in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
-    #     problem = MyPSO(3, config)
-    #     problem.setup()
-    # 
-    #     # Initialization of pseudorandom number generator
-    #     if prng is None:
-    #         prng = random.Random()
-    #         prng.seed(config.SEED)
-    # 
-    #     # Defining the 3 parameters to optimize
-    #     ea = inspyred.swarm.PSO(prng)
-    #     ea.terminator = problem.should_terminate
-    #     ea.topology = topologies.star_topology
-    #     ea.social_rate = config.social_rate
-    #     ea.cognitive_rate = config.cognitive_rate
-    #     ea.inertia = config.inertia
-    #     
-    #     final_pop = ea.evolve(
-    #         generator=problem.generator,
-    #         evaluator=problem.evaluator,
-    #         pop_size=problem.config.POPULATION_SIZE,
-    #         bounder=problem.bounder,
-    #         maximize=problem.maximize,
-    #         social_rate=config.social_rate,
-    #         cognitive_rate=config.cognitive_rate,
-    #         inertia=config.inertia,
-    #         neighborhood_size=20
-    #     )
-    # 
-    #     problem.save_best_solution(final_pop, display)
+    for seg in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
+        problem = MyPSO(3, config)
+        problem.setup()
 
-    
-        # # Plot the fitness value for each generation to see when it converges
-        # start = int(seg*config.MAX_GENERATIONS)
-        # end = int(1+(seg+1)*config.MAX_GENERATIONS)
-        # x_values = range(start,end)
-        # # Plotting the numbers with customizations
-        # plt.plot(x_values, conv[start:end], linestyle='--')
-        # plt.savefig(os.path.join(os.getcwd(),'convergence', str(seg)+'_conv.png'))
-        # # Adding titles and labels
-        # plt.title('Plot of Fitness convergence')
-        # plt.xlabel('Index')
-        # plt.ylabel('Fitness')
+        # Initialization of pseudorandom number generator
+        if prng is None:
+            prng = random.Random()
+            prng.seed(config.SEED)
+
+        # Defining the 3 parameters to optimize
+        ea = inspyred.swarm.PSO(prng)
+        ea.terminator = problem.should_terminate
+        ea.topology = topologies.star_topology
+        ea.social_rate = config.social_rate
+        ea.cognitive_rate = config.cognitive_rate
+        ea.inertia = config.inertia
+
+        final_pop = ea.evolve(
+            generator=problem.generator,
+            evaluator=problem.evaluator,
+            pop_size=problem.config.POPULATION_SIZE,
+            bounder=problem.bounder,
+            maximize=problem.maximize,
+            social_rate=config.social_rate,
+            cognitive_rate=config.cognitive_rate,
+            inertia=config.inertia,
+            neighborhood_size= config.neighborhood,
+        )
+
+        problem.save_best_solution(final_pop, display)
+
+        # Plot the fitness value for each generation to see when it converges
+        start = int(seg*config.MAX_GENERATIONS)
+        end = int(1+(seg+1)*config.MAX_GENERATIONS)
+        x_values = range(start,end)
+        # Plotting the numbers with customizations
+        # Create the primary axis
+        fig, ax1 = plt.subplots()
+
+        # Plot the first dataset on the primary y-axis
+        line1, = ax1.plot(x_values, min_conv[start:end], linestyle='--', color='b', label='MinF Segment ' + str(seg+1))
+        ax1.set_xlabel('Generation')
+        ax1.set_ylabel('Min Fitness', color='b')
+        ax1.tick_params(axis='y', labelcolor='b')
+        plt.legend()
+        # Create the secondary y-axis
+        ax2 = ax1.twinx()
+        line2, = ax2.plot(x_values, max_conv[start:end], linestyle='--', color='r', label='MaxF Segment ' + str(seg+1))
+        ax2.set_ylabel('Max Fitness', color='r')
+        ax2.tick_params(axis='y', labelcolor='r')
+
+        # Combine legends from both axes
+        lines = [line1, line2]
+        labels = [line.get_label() for line in lines]
+        ax1.legend(lines, labels, loc='upper right')
+
+        params_title = f"\nWeights = [S: {config.weight_S}, I: {config.weight_I}, R: {config.weight_R}, D: {config.weight_D}]\nPopulation: {config.POPULATION_SIZE}  Neighbourood: {config.neighborhood}\nCognitive Rate: {config.cognitive_rate}\nSocial Rate: {config.social_rate}\nInertia: {config.inertia}\n"
+        plt.title('\nPlot of Fitness convergence\n'+params_title)
+        plt.tight_layout()
+        plt.savefig(os.path.join(os.getcwd(),'convergence', str(seg)+'_conv.png'))
+        # Adding titles and labels
 
 
-        # config.LAG += config.DAYS
+        config.LAG += config.DAYS
 
     if lstm:
         train(config, weeks_limit=config.SEGMENTS)
