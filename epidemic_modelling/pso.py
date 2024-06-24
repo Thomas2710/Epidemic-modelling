@@ -2,16 +2,12 @@ import os
 import random
 
 import click
-import inspyred
 import numpy as np
 import pandas as pd
 import torch
 from inspyred import ec
 from inspyred.ec.emo import Pareto
 from inspyred.benchmarks import Benchmark
-from inspyred.swarm import topologies
-from tqdm import tqdm
-import matplotlib.pyplot as plt
 
 from epidemic_modelling.lstm.dataset import TimeSeriesDataset
 from epidemic_modelling.lstm.main import train
@@ -62,7 +58,7 @@ class LSTMConfig(BaseConfig):
         super().__init__()
         self.EPOCHS = 200
         self.LOG_EVERY_N_STEPS = 5
-        self.SEGMENTS = 170
+        self.SEGMENTS = 10
         self.PRE = "time_varying_pre_lstm"
         self.POST = "time_varying_post_lstm"
         self.DAYS = 7
@@ -192,14 +188,14 @@ class MyPSO(Benchmark):
         # print(f"MIN: Losses: I: {min_fit[0]}, R: {min_fit[1]}, D: {min_fit[2]}, S: {min_fit[3]}")
         # print(f"MAX: Losses: I: {max_fit[0]}, R: {max_fit[1]}, D: {max_fit[2]}, S: {max_fit[3]}")
         # print(f"Fitness: {fitness}")
-        print(f"Max fitness: {max(fitness)}")
-        print(f"Min fitness: {min(fitness)}")
+        # print(f"Max fitness: {max(fitness)}")
+        # print(f"Min fitness: {min(fitness)}")
         conv.append(min(fitness).fitness)
         self.epoch += 1
         return fitness
 
     def should_terminate(self, population, num_generations, num_evaluations, args):
-        print(f"Generation # {num_generations} ...", end="\r")
+        # print(f"Generation # {num_generations} ...", end="\r")
         return num_generations >= self.config.MAX_GENERATIONS
 
     def get_sird_from_data(self, start_week: int, end_week: int, population: int):
@@ -255,8 +251,8 @@ class MyPSO(Benchmark):
                 f.write("beta,gamma,delta\n")
             f.write(f"{best.candidate[0]},{best.candidate[1]},{best.candidate[2]}\n")
 
-        if display:
-            print(f"Best solution: {best.candidate} with fitness: {best.fitness}")
+        # if display:
+        #     print(f"Best solution: {best.candidate} with fitness: {best.fitness}")
 
 
 def clean_paths(config):
@@ -313,60 +309,60 @@ def main(display, time_varying, lstm, prng):
         config = BaselineConfig()
 
     print(f"Running {config.__class__.__name__} configuration")
-    clean_paths(config)
+    # clean_paths(config)
 
     beta_values = []
     delta_values = []
     gamma_values = []
-    for seg in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
-        problem = MyPSO(3, config)
-        problem.setup()
-
-        # Initialization of pseudorandom number generator
-        if prng is None:
-            prng = random.Random()
-            prng.seed(config.SEED)
-
-        # Defining the 3 parameters to optimize
-        ea = inspyred.swarm.PSO(prng)
-        ea.terminator = problem.should_terminate
-        ea.topology = topologies.star_topology
-        ea.social_rate = config.social_rate
-        ea.cognitive_rate = config.cognitive_rate
-        ea.inertia = config.inertia
-        
-        final_pop = ea.evolve(
-            generator=problem.generator,
-            evaluator=problem.evaluator,
-            pop_size=problem.config.POPULATION_SIZE,
-            bounder=problem.bounder,
-            maximize=problem.maximize,
-            social_rate=config.social_rate,
-            cognitive_rate=config.cognitive_rate,
-            inertia=config.inertia,
-            neighborhood_size=20
-        )
-
-        problem.save_best_solution(final_pop, display)
+    # for seg in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
+    #     problem = MyPSO(3, config)
+    #     problem.setup()
+    # 
+    #     # Initialization of pseudorandom number generator
+    #     if prng is None:
+    #         prng = random.Random()
+    #         prng.seed(config.SEED)
+    # 
+    #     # Defining the 3 parameters to optimize
+    #     ea = inspyred.swarm.PSO(prng)
+    #     ea.terminator = problem.should_terminate
+    #     ea.topology = topologies.star_topology
+    #     ea.social_rate = config.social_rate
+    #     ea.cognitive_rate = config.cognitive_rate
+    #     ea.inertia = config.inertia
+    #     
+    #     final_pop = ea.evolve(
+    #         generator=problem.generator,
+    #         evaluator=problem.evaluator,
+    #         pop_size=problem.config.POPULATION_SIZE,
+    #         bounder=problem.bounder,
+    #         maximize=problem.maximize,
+    #         social_rate=config.social_rate,
+    #         cognitive_rate=config.cognitive_rate,
+    #         inertia=config.inertia,
+    #         neighborhood_size=20
+    #     )
+    # 
+    #     problem.save_best_solution(final_pop, display)
 
     
-        # Plot the fitness value for each generation to see when it converges
-        start = int(seg*config.MAX_GENERATIONS)
-        end = int(1+(seg+1)*config.MAX_GENERATIONS)
-        x_values = range(start,end)
-        # Plotting the numbers with customizations
-        plt.plot(x_values, conv[start:end], linestyle='--')
-        plt.savefig(os.path.join(os.getcwd(),'convergence', str(seg)+'_conv.png'))
-        # Adding titles and labels
-        plt.title('Plot of Fitness convergence')
-        plt.xlabel('Index')
-        plt.ylabel('Fitness')
+        # # Plot the fitness value for each generation to see when it converges
+        # start = int(seg*config.MAX_GENERATIONS)
+        # end = int(1+(seg+1)*config.MAX_GENERATIONS)
+        # x_values = range(start,end)
+        # # Plotting the numbers with customizations
+        # plt.plot(x_values, conv[start:end], linestyle='--')
+        # plt.savefig(os.path.join(os.getcwd(),'convergence', str(seg)+'_conv.png'))
+        # # Adding titles and labels
+        # plt.title('Plot of Fitness convergence')
+        # plt.xlabel('Index')
+        # plt.ylabel('Fitness')
 
 
-        config.LAG += config.DAYS
+        # config.LAG += config.DAYS
 
     if lstm:
-        train(config)
+        train(config, weeks_limit=config.SEGMENTS)
         model = LSTMModel.load_from_checkpoint("lstm_model.ckpt")
         model.eval()
         params, sird = TimeSeriesDataset.load_data(config)
@@ -376,7 +372,10 @@ def main(display, time_varying, lstm, prng):
         params_collection = pd.DataFrame(params).T
         # run inference
         for i in range(14):
-            sird_tensor = torch.tensor(sird, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+            sird_tensor = torch.tensor(sird, dtype=torch.float32).unsqueeze(0)
+            if len(sird_tensor.size()) < 3:
+                sird_tensor = sird_tensor.unsqueeze(0)
+            
             params_tensor = torch.tensor(params, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
             # run inference
             sird, params = model(params_tensor, sird_tensor)

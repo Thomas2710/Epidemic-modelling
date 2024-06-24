@@ -15,7 +15,6 @@
 # I(t) is proprtional to exp(Beta * ((S - 1/R0)*I))
 
 from scipy.integrate import solve_ivp
-import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -146,6 +145,7 @@ class SIRD:
     def setup(self, population: int, initial_I: int, initial_R: int, initial_D: int):
         # Compute initial values
         self.population = population
+        print(self.population)
         initial_S = (population - initial_I - initial_R - initial_D) / population
         initial_R /= population
         initial_D /= population

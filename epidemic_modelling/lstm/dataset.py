@@ -39,15 +39,20 @@ class TimeSeriesDataset:
         return df_raw.values.tolist(), df_sird.values.tolist()
 
     @staticmethod
-    def preprocess_data(params, sird, input_length, target_length, offset=7):
+    def preprocess_data(params, sird, input_length, target_length, offset=7, weeks_limit=None):
         assert target_length == 1, "Target length must be 1 when working with LSTM"
+        
+        overhead = input_length + target_length + offset
+        max_length = len(params) if weeks_limit is None else weeks_limit
+        max_length += overhead
+        
         
         # LET'S ALWAYS CONSIDER THAT WE ARE SIMULATING 7 DAYS IN 7 DAYS
         # SO THAT DATA -> CONTAINS SIRD PARAMS FOR 1 WEEK
         # data -> [{beta,gamma,delta},...{beta, gamma, delta}]
         # Parameters dataset
         starting_params = [
-            params[i : i + input_length] for i in range(len(params) - input_length - offset - 1)
+            params[i : i + input_length] for i in range(max_length)
         ]
 
         # SHOULD CONTAINS all the S,I,R,D real values day by day
@@ -55,7 +60,7 @@ class TimeSeriesDataset:
         # 7 days considered for 4 segments => 28 rows
         # TODO: verify if it is doing so that
         original_sird = [
-            sird[i : i + offset + 1] for i in range(len(params) - input_length - offset - 1)
+            sird[i : i + offset + 1] for i in range(max_length)
         ]
         
         return starting_params, original_sird
