@@ -17,32 +17,43 @@ from epidemic_modelling.lstm.model import LSTMModel
 from epidemic_modelling.sird_base_model import SIRD
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-
+import math
 
 min_conv = []
 max_conv = []
 current_seg = 0
 
 
+# Function to convert a number to engineering notation
+def to_eng_notation(value):
+    if value == 0:
+        return "0"
+
+    exponent = int(math.floor(math.log10(abs(value)) / 3) * 3)
+    scaled_value = value / (10**exponent)
+
+    return f"{scaled_value:.3g}e{exponent:+}"
+
+
 class BaseConfig:
     def __init__(self) -> None:
         self.SEED = 42
-        self.MAX_GENERATIONS = 5e1
-        self.POPULATION_SIZE = 500
+        self.MAX_GENERATIONS = 1e2
+        self.POPULATION_SIZE = 3e2
         self.LAG = 0
 
         self.PARAMS_THRESHOLD = 0.99
         self.FACTOR_LOWER_BOUND = 0.001
         self.FACTOR_UPPER_BOUND = 1.0
 
-        self.weight_S = 1
-        self.weight_I = 1
-        self.weight_R = 1
-        self.weight_D = 1
+        self.weight_S = 0.8
+        self.weight_I = 5
+        self.weight_R = 2
+        self.weight_D = 3
 
         self.cognitive_rate = 2.1
-        self.social_rate = 2.1
-        self.inertia = 0.5
+        self.social_rate = 1.2
+        self.inertia = 0.65
         self.neighborhood = 5
 
 
@@ -95,7 +106,12 @@ class ParetoLoss(Pareto):
 
 
 class MyPSO(Benchmark):
-    def __init__(self, dimensions=3, config: BaseConfig = None):
+    def __init__(
+        self,
+        dimensions=3,
+        config: BaseConfig = None,
+        best_initial_condition: dict = None,
+    ):
         Benchmark.__init__(self, dimensions)
         self.config = config
         self.bounder = ec.Bounder(
@@ -103,8 +119,6 @@ class MyPSO(Benchmark):
             self.config.FACTOR_UPPER_BOUND * self.dimensions,
         )
         self.maximize = False
-        # self.global_optimum = [0 for _ in range(self.dimensions)]
-        # self.t = 0
         # Absolute path of the data file
         script_dir = os.path.dirname(os.path.abspath(__file__))
         filepath = os.path.join(script_dir, "../data/daily_processed.csv")
@@ -112,6 +126,8 @@ class MyPSO(Benchmark):
         self.population = 60_000_000
         self.epoch = 0
         random.seed = self.config.SEED
+        if best_initial_condition is not None:
+            self.best_initial_condition = best_initial_condition
 
     def generator(self, random, args):
         # Generate an initial random candidate for each dimension
@@ -123,24 +139,17 @@ class MyPSO(Benchmark):
         ]
         return x
 
-    # def get_ird(self):
-    #     infected = self.data["totale_positivi"].values[:]
-
-    # def write_parameters(self, beta, gamma, delta, fitness):
-    #     script_dir = os.path.dirname(os.path.abspath(__file__))
-    #     plot_filepath = os.path.join(script_dir, "../data/param.csv")
-    #     with open(plot_filepath, "a") as f:
-    #         if f.tell() == 0:
-    #             f.write("beta,gamma,delta,fitness_value\n")
-    #         f.write(f"{beta},{gamma},{delta},{fitness}\n")
-
     def setup(self):
-        # For the moment we are going to consider only the first 10 weeks
-        self.initial_conds, _ = self.get_sird_from_data(
-            self.config.LAG, self.config.DAYS + self.config.LAG, self.population
-        )
+        if current_seg == 0:
+            self.initial_conds, _ = self.get_sird_from_data(
+                self.config.LAG, self.config.DAYS + self.config.LAG, self.population
+            )
+        else:
+            self.initial_conds = self.best_initial_condition
         _, self.future_conds = self.get_sird_from_data(
-            self.config.LAG + 1, self.config.DAYS + self.config.LAG + 1, self.population
+            self.config.LAG + 1,
+            self.config.DAYS + self.config.LAG + 1,
+            self.population,
         )
 
     def evaluator(self, candidates, args):
@@ -165,22 +174,12 @@ class MyPSO(Benchmark):
             # solve
             days = self.config.DAYS
             # pickup GT
-            initial_date = self.config.DAYS * current_seg
-            # if idx == 0:
-            # print(f"Starting from day {initial_date} to day {initial_date + days}")
-            # model.solve(self.initial_conds, initial_date + days)
             model.solve(self.initial_conds, days)
             # Values obtained
             computed_S, computed_I, computed_R, computed_D, sum_params = (
                 model.get_sird_values().values()
             )
             current_params = [computed_S, computed_I, computed_R, computed_D]
-            # current_params = [
-            #     computed_S[-self.config.DAYS - 1 :],
-            #     computed_I[-self.config.DAYS - 1 :],
-            #     computed_R[-self.config.DAYS - 1 :],
-            #     computed_D[-self.config.DAYS - 1 :],
-            # ]
             # Check if the sum of the parameters is valid
             assert (
                 sum_params.all() >= self.config.PARAMS_THRESHOLD
@@ -190,32 +189,15 @@ class MyPSO(Benchmark):
             losses = model.compute_loss(current_params, future_params, loss="RMSE")
             partial_losses.append(losses)
 
-            # Print losses obtained
-            # print(
-            #     f"Losses: S: {loss_susceptible}, I: {loss_infected}, R: {loss_recovered}, D: {loss_deceased}"
-            # )
-
             # loss_normalized = np.mean(losses)
             fitness.append(ParetoLoss(losses, args=args))
-            # print(f"Loss normalized: {loss_normalized}")
 
-            # fitness.append(loss_normalized)
-            # print(f"\nFitness: {loss_normalized}\n")
-        # print(f"Min fit: {min(fitness)}, max fit: {max(fitness)}")
-        # min_fit = (min(partial_losses))
-        # max_fit = (max(partial_losses))
-        # print(f"MIN: Losses: I: {min_fit[0]}, R: {min_fit[1]}, D: {min_fit[2]}, S: {min_fit[3]}")
-        # print(f"MAX: Losses: I: {max_fit[0]}, R: {max_fit[1]}, D: {max_fit[2]}, S: {max_fit[3]}")
-        # print(f"Fitness: {fitness}")
-        # print(f"Max fitness: {max(fitness)}")
-        # print(f"Min fitness: {min(fitness)}")
         min_conv.append(min(fitness).fitness)
         max_conv.append(max(fitness).fitness)
         self.epoch += 1
         return fitness
 
     def should_terminate(self, population, num_generations, num_evaluations, args):
-        # print(f"Generation # {num_generations} ...", end="\r")
         return num_generations >= self.config.MAX_GENERATIONS
 
     def get_sird_from_data(self, start_week: int, end_week: int, population: int):
@@ -271,8 +253,7 @@ class MyPSO(Benchmark):
                 f.write("beta,gamma,delta\n")
             f.write(f"{best.candidate[0]},{best.candidate[1]},{best.candidate[2]}\n")
 
-        # if display:
-        #     print(f"Best solution: {best.candidate} with fitness: {best.fitness}")
+        return best.candidate[0], best.candidate[1], best.candidate[2]
 
 
 def clean_paths(config):
@@ -318,15 +299,6 @@ def main(display, time_varying, lstm, prng):
     if time_varying:
         config = TimeVaryingConfig()
     elif lstm:
-        # TODO:
-        # When LSTM is chosen
-        # Run time variant approach first, save time_varying_pre_lstm.csv
-        # Run lstm considering time_varying_pre_lstm.csv dataset
-        # Train LSTM
-        # Run inference from first row time_varying_pre_lstm.csv
-        # rows : indays*segments
-        # Save lstm output in time_varying_post_lstm.csv
-        # Plot that shit -> ipynb file -> for i in weeks -> load SIRD module and inference + plot
         config = LSTMConfig()
     else:
         config = BaselineConfig()
@@ -334,13 +306,11 @@ def main(display, time_varying, lstm, prng):
     print(f"Running {config.__class__.__name__} configuration")
     clean_paths(config)
 
-    beta_values = []
-    delta_values = []
-    gamma_values = []
+    best_initial_conditions = None
     for seg in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
         global current_seg
         current_seg = seg
-        problem = MyPSO(3, config)
+        problem = MyPSO(3, config, best_initial_conditions)
         problem.setup()
 
         # Initialization of pseudorandom number generator
@@ -368,8 +338,25 @@ def main(display, time_varying, lstm, prng):
             neighborhood_size=config.neighborhood,
         )
 
-        problem.save_best_solution(final_pop, display)
-
+        best = problem.save_best_solution(final_pop, display)
+        # RUN SIRD with best parameters in that specific timeframe
+        sird = SIRD(beta=best[0], gamma=best[1], delta=best[2])
+        starting_point, _ = problem.get_sird_from_data(
+            problem.config.LAG,
+            problem.config.DAYS + problem.config.LAG,
+            problem.population,
+        )
+        sird.solve(starting_point, problem.config.DAYS)
+        computed_S, computed_I, computed_R, computed_D, sum_params = (
+            sird.get_sird_values().values()
+        )
+        best_initial_conditions = {
+            "population": problem.population,
+            "initial_I": computed_I[-1],
+            "initial_R": computed_R[-1],
+            "initial_D": computed_D[-1],
+            "initial_S": computed_S[-1],
+        }
         # Plot the fitness value for each generation to see when it converges
         # check if convergence folder is present
 
@@ -380,7 +367,7 @@ def main(display, time_varying, lstm, prng):
             os.makedirs(os.path.join(os.getcwd(), "convergence", convergence_folder))
         start = int(seg * config.MAX_GENERATIONS)
         end = int(1 + (seg + 1) * config.MAX_GENERATIONS)
-        x_values = range(start, end)
+        x_values = range(0, int(config.MAX_GENERATIONS) + 1)
         # Plotting the numbers with customizations
         # Create the primary axis
         fig, ax1 = plt.subplots()
@@ -415,15 +402,16 @@ def main(display, time_varying, lstm, prng):
         ax1.legend(lines, labels, loc="upper right")
 
         params_title = f"\nWeights = [S: {config.weight_S}, I: {config.weight_I}, R: {config.weight_R}, D: {config.weight_D}]\nPopulation: {config.POPULATION_SIZE}  Neighbourood: {config.neighborhood}\nCognitive Rate: {config.cognitive_rate}\nSocial Rate: {config.social_rate}\nInertia: {config.inertia}\n"
-        plt.title("\nPlot of Fitness convergence\n" + params_title)
+        max_min_desc = f"Max Fitness: {to_eng_notation(min(max_conv[start:end]))} Min Fitness: {to_eng_notation(min(min_conv[start:end]))}"
+        plt.title(
+            "\nPlot of Fitness convergence\n" + params_title + "\n" + max_min_desc
+        )
         plt.tight_layout()
         plt.savefig(
             os.path.join(
                 os.getcwd(), "convergence", convergence_folder, str(seg) + "_conv.png"
             )
         )
-        # Adding titles and labels
-
         config.LAG += config.DAYS
 
     if lstm:

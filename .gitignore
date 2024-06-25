@@ -5,5 +5,3 @@ __pycache__/
 .idea/
 .vscode/
 lightning_logs/
-plots/
-convergence/

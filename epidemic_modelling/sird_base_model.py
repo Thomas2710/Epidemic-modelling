@@ -155,16 +155,6 @@ class SIRD:
         assert (
             abs(1.0 - computed_population) <= ALLOWED_ERROR
         ), "Error in the computation of the population!"
-        # Coeffs are computed in the __init__ func
-
-        # Compute coefficients
-        # self.beta = 0.2
-        # self.gamma = 0.7
-        # self.delta = 0.1
-
-        # self.beta = self.R0 / self.P
-        # self.gamma = (1 - self.M) / self.P
-        # self.delta = self.M / self.P
 
     def solve(self, initial_conditions: dict, time_frame: int = 300):
         """
@@ -189,14 +179,10 @@ class SIRD:
             initial_conditions["initial_R"],
             initial_conditions["initial_D"],
         )
-        # print('setup solve')
         t_span = (
             0,
             time_frame,
         )  # tf is number of days to run simulation for, defaulting to 300
-        # print('In solve about to solve')
-        # print('solving for time frame:', time_frame)
-        # print('beta gamma and delta are: ', self.beta, self.gamma, self.delta)
         self.soln = solve_ivp(
             self.eqns,
             t_span,
@@ -291,11 +277,11 @@ class SIRD:
             loss_R = np.mean((computed_R - actual_R) ** 2)
             loss_D = np.mean((computed_D - actual_D) ** 2)
         else:
-            raise NotImplementedError("Only MSE loss is supported")
+            raise NotImplementedError("Only MSE and RMSE loss are supported")
 
         # print(f"Loss: {loss_S}, {loss_I}, {loss_R}, {loss_D}")
 
-        return loss_I, loss_R, loss_D, loss_S
+        return loss_S, loss_I, loss_R, loss_D
 
     def plot(self, ax=None, susceptible=True, lag=0):
         S, I, R, D = self.soln.y
