@@ -1,43 +1,72 @@
-# Lambda = contact rate
+# Beta = contact rate
 # Gamma = recovery rate
-# Mu = death rate
-# Average mortality rate = Mu/Gamma
-# R0 (contact number) = Lambda/(Gamma + Mu)
+# Delta = death rate
+# Average mortality rate = Delta/Gamma
+# R0 (contact number) = Beta/(Gamma + Delta)
 
-# dS/dt = -Lambda * S * I
-# dI/dt = Lambda * S * I - (Gamma * I) - (Mu * I)
+# dS/dt = -Beta * S * I
+# dI/dt = Beta * S * I - (Gamma * I) - (Delta * I)
 # dR/dt = Gamma * I
-# dD/dt = Mu * I
-# S + I + R + D = 1
+# dD/dt = Delta * I
+# S + I + R + D = N
+
 
 # Infection over time
-# I(t) is proprtional to exp(Lambda * ((S - 1/R0)*I))
+# I(t) is proprtional to exp(Beta * ((S - 1/R0)*I))
 
 from scipy.integrate import solve_ivp
-import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 
 initial_conditions = {
-    "population": 60000000,
-    "cases": 3000,
-    "deaths": 80,
-    "recovered": 20,
+    "population": 60e6,
+    "initial_I": 3000,
+    "initial_R": 20,
+    "initial_D": 80,
 }
+
+ALLOWED_ERROR = 1e-5
 
 
 class SIRD:
-    def __init__(self, R0: float, M: float, P: int):
-        # Model parameters
+    def __init__(
+        self,
+        R0: float = None,
+        M: float = None,
+        P: float = None,
+        beta: float = None,
+        gamma: float = None,
+        delta: float = None,
+    ):
+        if R0 is not None and M is not None and P is not None:
+            # Model parameters given R0, M, P
+            # R0: Basic Reproductive Rate [people]
+            self.R0 = R0
+            # M: mortality rate ratio
+            self.M = M
+            # P: Average infectious period [days]
+            self.P = P  # 5.1 days
 
-        # R0: Basic Reproductive Rate [people]
-        self.R0 = R0
-        # M: mortality rate ratio
-        self.M = M
-        # P: Average infectious period [days]
-        self.P = P
+            # Calculate beta, gamma, delta from R0, M, P
+            self.beta = self.R0 / self.P
+            self.gamma = (1 - self.M) / self.P
+            self.delta = self.M / self.P
+        elif beta is not None and gamma is not None and delta is not None:
+            # Model parameters given beta, gamma, delta
+            self.beta = beta
+            self.gamma = gamma
+            self.delta = delta
 
-    def dSdt(self, S: int, I: int, lamb: float):
+            # Calculate R0, M, P from beta, gamma, delta
+            self.P = 1 / (self.gamma + self.delta)
+            self.R0 = self.beta * self.P
+            self.M = self.delta / (self.gamma + self.delta)
+        else:
+            raise ValueError(
+                "Either (R0, M, P) or (beta, gamma, delta) must be provided"
+            )
+
+    def dSdt(self, S: int, I: int, beta: float):
         """
         Compute Susceptible parameter over time
 
@@ -45,15 +74,15 @@ class SIRD:
         ------------
         S: Susceptible population
         I: Infected population
-        lamb: Contact rate
+        beta: Contact rate
 
         Returns:
         ------------
         dSdt: Susceptible population over time
         """
-        return -lamb * S * I
+        return -beta * S * I
 
-    def dIdt(self, S: int, I: int, lamb: float, gamma: float, mu: float):
+    def dIdt(self, S: int, I: int, beta: float, gamma: float, delta: float):
         """
         Compute Infected parameter over time
 
@@ -62,15 +91,15 @@ class SIRD:
 
         S: Susceptible population
         I: Infected population
-        lamb: Contact rate
+        beta: Contact rate
         gamma: Recovery rate
-        mu: Death rate
+        delta: Death rate
 
         Returns:
         ------------
         dIdt: Infected population over time
         """
-        return lamb * S * I - gamma * I - mu * I
+        return beta * S * I - gamma * I - delta * I
 
     def dRdt(self, I: int, gamma: float):
         """
@@ -87,44 +116,45 @@ class SIRD:
         """
         return gamma * I
 
-    def dDdt(self, I: int, mu: float):
+    def dDdt(self, I: int, delta: float):
         """
         Compute Deaths parameter over time
 
         Parameters:
         ------------
         I: Infected population
-        mu: Death rate
+        delta: Death rate
 
         Returns:
         ------------
         dDdt: Deaths population over time
         """
 
-        return mu * I
+        return delta * I
 
-    def eqns(self, t: int, y: tuple, lamb: float, gamma: float, mu: float):
+    def eqns(self, t: int, y: tuple, beta: float, gamma: float, delta: float):
         S, I, R, D = y
+        # print(beta, gamma, delta)
         return [
-            self.dSdt(S, I, lamb),
-            self.dIdt(S, I, lamb, gamma, mu),
+            self.dSdt(S, I, beta),
+            self.dIdt(S, I, beta, gamma, delta),
             self.dRdt(I, gamma),
-            self.dDdt(I, mu),
+            self.dDdt(I, delta),
         ]
 
-    def setup(self, population: int, cases: int, recovered: int, deaths: int):
+    def setup(self, population: int, initial_I: int, initial_R: int, initial_D: int):
         # Compute initial values
         self.population = population
-        initial_S = (population - cases) / population
-        initial_R = recovered / population
-        initial_D = deaths / population
-        initial_I = 1 - initial_S - initial_R - initial_D
+        initial_S = (population - initial_I - initial_R - initial_D) / population
+        initial_R /= population
+        initial_D /= population
+        initial_I /= population
         self.y0 = [initial_S, initial_I, initial_R, initial_D]
 
-        # Compute coefficients
-        self.gamma = 1 / self.P
-        self.mu = self.gamma * self.M
-        self.lamb = self.R0 * (self.gamma + self.mu)
+        computed_population = initial_S + initial_I + initial_R + initial_D
+        assert (
+            abs(1.0 - computed_population) <= ALLOWED_ERROR
+        ), "Error in the computation of the population!"
 
     def solve(self, initial_conditions: dict, time_frame: int = 300):
         """
@@ -143,52 +173,129 @@ class SIRD:
         self: SIRD
             Returns the instance of the class
         """
-
         self.setup(
             initial_conditions["population"],
-            initial_conditions["cases"],
-            initial_conditions["recovered"],
-            initial_conditions["deaths"],
+            initial_conditions["initial_I"],
+            initial_conditions["initial_R"],
+            initial_conditions["initial_D"],
         )
-
         t_span = (
             0,
             time_frame,
         )  # tf is number of days to run simulation for, defaulting to 300
-
         self.soln = solve_ivp(
             self.eqns,
             t_span,
             self.y0,
-            args=(self.lamb, self.gamma, self.mu),
-            t_eval=np.linspace(0, time_frame, time_frame * 2),
+            args=(self.beta, self.gamma, self.delta),
+            t_eval=np.linspace(0, time_frame, time_frame + 1),
         )
         return self
-    
-    def get_params(self):
+
+    def get_sird_values(self):
         """
         Return the model parameters after a simulation has been run
-        
+
         Returns:
         ------------
         dict: dictionary containing model parameters
         """
-        params = self.soln.y[:, -1]
-        return { "S": params[0], "I": params[1], "R": params[2], "D": params[3]}
+        params = self.soln.y
+        params = {
+            "S": params[0],
+            "I": params[1],
+            "R": params[2],
+            "D": params[3],
+            "Sum params:": sum(params),
+        }
+        params = {
+            k: v * self.population for k, v in params.items() if k != "Sum params"
+        }
+        return params
 
-    def plot(self, ax=None, susceptible=True):
+    def get_sird_series(self):
+        """
+        Return the model parameters after a simulation has been run
+
+        Returns:
+        ------------
+        dict: dictionary containing model parameters
+        """
+        params = self.soln.y * self.population
+
+        params = {"S": params[0], "I": params[1], "R": params[2], "D": params[3]}
+        return params
+
+    def get_initial_params(self):
+        """
+        Return the initial model parameters
+
+        Returns:
+        ------------
+        dict: dictionary containing model parameters
+        """
+        params = self.y0
+        return {
+            "initial_S": params[0],
+            "initial_I": params[1],
+            "initial_R": params[2],
+            "initial_D": params[3],
+            "Sum params:": sum(params),
+        }
+
+    def compute_loss(self, computed_sird: list, actual_sird: list, loss: str = "RMSE"):
+        """
+        Compute the MSE
+
+        Parameters:
+        ------------
+        params: dict
+            Dictionary containing the model parameters computed via PSO
+        time_frame: int
+            Number of weeks to run simulation for
+        loss: str
+            Loss function to use
+
+        Returns:
+        ------------
+        float: loss of the parameters
+        """
+        computed_S, computed_I, computed_R, computed_D = computed_sird
+        actual_S, actual_I, actual_R, actual_D = actual_sird
+
+        # print(f"Computed {computed_I}, {computed_R}, {computed_D}")
+        # print(f"Actual {actual_I}, {actual_R}, {actual_D}")
+
+        if loss == "RMSE":
+            loss_S = np.sqrt(np.mean((computed_S - actual_S) ** 2))
+            loss_I = np.sqrt(np.mean((computed_I - actual_I) ** 2))
+            loss_R = np.sqrt(np.mean((computed_R - actual_R) ** 2))
+            loss_D = np.sqrt(np.mean((computed_D - actual_D) ** 2))
+        elif loss == "MSE":
+            loss_S = np.mean((computed_S - actual_S) ** 2)
+            loss_I = np.mean((computed_I - actual_I) ** 2)
+            loss_R = np.mean((computed_R - actual_R) ** 2)
+            loss_D = np.mean((computed_D - actual_D) ** 2)
+        else:
+            raise NotImplementedError("Only MSE and RMSE loss are supported")
+
+        # print(f"Loss: {loss_S}, {loss_I}, {loss_R}, {loss_D}")
+
+        return loss_S, loss_I, loss_R, loss_D
+
+    def plot(self, ax=None, susceptible=True, lag=0):
         S, I, R, D = self.soln.y
-        t = self.soln.t
+        t = self.soln.t + lag
         N = self.population
 
         print(f"For a population of {N} people, after {t[-1]:.0f} days there were:")
-        print(f"{D[-1]*100:.1f}% total deaths, or {D[-1]*N:.0f} people.")
-        print(f"{R[-1]*100:.1f}% total recovered, or {R[-1]*N:.0f} people.")
+        print(f"{D[-1]*100:.1f}% total deaths, or {D[-1]:.0f} people.")
+        print(f"{R[-1]*100:.1f}% total recovered, or {R[-1]:.0f} people.")
         print(
-            f"At the virus' maximum {I.max()*100:.1f}% people were simultaneously infected, or {I.max()*N:.0f} people."
+            f"At the virus' maximum {I.max()*100:.1f}% people were simultaneously infected, or {I.max():.0f} people."
         )
         print(
-            f"After {t[-1]:.0f} days the virus was present in less than {I[-1]*N:.0f} individuals."
+            f"After {t[-1]:.0f} days the virus was present in less than {I[-1]:.0f} individuals."
         )
 
         if ax is None:
