@@ -292,7 +292,7 @@ def save_post(config, params_collection):
     "--lstm",
     default=False,
     is_flag=True,
-    help="Run the baseline with LSTM parameter  s",
+    help="Run the baseline with LSTM parameters",
 )
 @click.option("--prng", default=None, help="Seed for the pseudorandom number generator")
 def main(display, time_varying, lstm, prng):
