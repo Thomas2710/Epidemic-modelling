@@ -21,6 +21,8 @@ import matplotlib.pyplot as plt
 
 min_conv = []
 max_conv = []
+current_seg = 0
+
 
 class BaseConfig:
     def __init__(self) -> None:
@@ -38,10 +40,10 @@ class BaseConfig:
         self.weight_R = 1
         self.weight_D = 1
 
-        self.cognitive_rate = 1.0
-        self.social_rate = 2.5
-        self.inertia = 0.3
-        self.neighborhood = 3
+        self.cognitive_rate = 2.1
+        self.social_rate = 2.1
+        self.inertia = 0.5
+        self.neighborhood = 5
 
 
 class BaselineConfig(BaseConfig):
@@ -158,17 +160,27 @@ class MyPSO(Benchmark):
             self.config.weight_R,
             self.config.weight_D,
         ]
-        for beta, gamma, delta in candidates:
+        for idx, (beta, gamma, delta) in enumerate(candidates):
             model = SIRD(beta=beta, gamma=gamma, delta=delta)
             # solve
             days = self.config.DAYS
             # pickup GT
+            initial_date = self.config.DAYS * current_seg
+            # if idx == 0:
+            # print(f"Starting from day {initial_date} to day {initial_date + days}")
+            # model.solve(self.initial_conds, initial_date + days)
             model.solve(self.initial_conds, days)
             # Values obtained
             computed_S, computed_I, computed_R, computed_D, sum_params = (
                 model.get_sird_values().values()
             )
             current_params = [computed_S, computed_I, computed_R, computed_D]
+            # current_params = [
+            #     computed_S[-self.config.DAYS - 1 :],
+            #     computed_I[-self.config.DAYS - 1 :],
+            #     computed_R[-self.config.DAYS - 1 :],
+            #     computed_D[-self.config.DAYS - 1 :],
+            # ]
             # Check if the sum of the parameters is valid
             assert (
                 sum_params.all() >= self.config.PARAMS_THRESHOLD
@@ -274,6 +286,7 @@ def clean_paths(config):
     if os.path.exists(best_solution_filepath):
         os.remove(best_solution_filepath)
 
+
 def save_post(config, params_collection):
     file_path = config.POST
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -281,8 +294,10 @@ def save_post(config, params_collection):
     if os.path.exists(post_file_path):
         os.remove(post_file_path)
     # set header to beta, gamma, delta
-    params_collection.to_csv(post_file_path, index=False, header=["beta", "gamma", "delta"])
-    
+    params_collection.to_csv(
+        post_file_path, index=False, header=["beta", "gamma", "delta"]
+    )
+
 
 @click.command()
 @click.option("--display", default=True, is_flag=True, help="Display the best solution")
@@ -317,12 +332,14 @@ def main(display, time_varying, lstm, prng):
         config = BaselineConfig()
 
     print(f"Running {config.__class__.__name__} configuration")
-    # clean_paths(config)
+    clean_paths(config)
 
     beta_values = []
     delta_values = []
     gamma_values = []
     for seg in tqdm(range(config.SEGMENTS), unit="Segment", position=0, leave=True):
+        global current_seg
+        current_seg = seg
         problem = MyPSO(3, config)
         problem.setup()
 
@@ -348,42 +365,64 @@ def main(display, time_varying, lstm, prng):
             social_rate=config.social_rate,
             cognitive_rate=config.cognitive_rate,
             inertia=config.inertia,
-            neighborhood_size= config.neighborhood,
+            neighborhood_size=config.neighborhood,
         )
 
         problem.save_best_solution(final_pop, display)
 
         # Plot the fitness value for each generation to see when it converges
-        start = int(seg*config.MAX_GENERATIONS)
-        end = int(1+(seg+1)*config.MAX_GENERATIONS)
-        x_values = range(start,end)
+        # check if convergence folder is present
+
+        convergence_folder = f"cr_{config.cognitive_rate}_sr_{config.social_rate}_in_{config.inertia}_nh_{config.neighborhood}"
+        if not os.path.exists(
+            os.path.join(os.getcwd(), "convergence", convergence_folder)
+        ):
+            os.makedirs(os.path.join(os.getcwd(), "convergence", convergence_folder))
+        start = int(seg * config.MAX_GENERATIONS)
+        end = int(1 + (seg + 1) * config.MAX_GENERATIONS)
+        x_values = range(start, end)
         # Plotting the numbers with customizations
         # Create the primary axis
         fig, ax1 = plt.subplots()
 
         # Plot the first dataset on the primary y-axis
-        line1, = ax1.plot(x_values, min_conv[start:end], linestyle='--', color='b', label='MinF Segment ' + str(seg+1))
-        ax1.set_xlabel('Generation')
-        ax1.set_ylabel('Min Fitness', color='b')
-        ax1.tick_params(axis='y', labelcolor='b')
+        (line1,) = ax1.plot(
+            x_values,
+            min_conv[start:end],
+            linestyle="--",
+            color="b",
+            label="MinF Segment " + str(seg + 1),
+        )
+        ax1.set_xlabel("Generation")
+        ax1.set_ylabel("Min Fitness", color="b")
+        ax1.tick_params(axis="y", labelcolor="b")
         plt.legend()
         # Create the secondary y-axis
         ax2 = ax1.twinx()
-        line2, = ax2.plot(x_values, max_conv[start:end], linestyle='--', color='r', label='MaxF Segment ' + str(seg+1))
-        ax2.set_ylabel('Max Fitness', color='r')
-        ax2.tick_params(axis='y', labelcolor='r')
+        (line2,) = ax2.plot(
+            x_values,
+            max_conv[start:end],
+            linestyle="--",
+            color="r",
+            label="MaxF Segment " + str(seg + 1),
+        )
+        ax2.set_ylabel("Max Fitness", color="r")
+        ax2.tick_params(axis="y", labelcolor="r")
 
         # Combine legends from both axes
         lines = [line1, line2]
         labels = [line.get_label() for line in lines]
-        ax1.legend(lines, labels, loc='upper right')
+        ax1.legend(lines, labels, loc="upper right")
 
         params_title = f"\nWeights = [S: {config.weight_S}, I: {config.weight_I}, R: {config.weight_R}, D: {config.weight_D}]\nPopulation: {config.POPULATION_SIZE}  Neighbourood: {config.neighborhood}\nCognitive Rate: {config.cognitive_rate}\nSocial Rate: {config.social_rate}\nInertia: {config.inertia}\n"
-        plt.title('\nPlot of Fitness convergence\n'+params_title)
+        plt.title("\nPlot of Fitness convergence\n" + params_title)
         plt.tight_layout()
-        plt.savefig(os.path.join(os.getcwd(),'convergence', str(seg)+'_conv.png'))
+        plt.savefig(
+            os.path.join(
+                os.getcwd(), "convergence", convergence_folder, str(seg) + "_conv.png"
+            )
+        )
         # Adding titles and labels
-
 
         config.LAG += config.DAYS
 
@@ -401,8 +440,10 @@ def main(display, time_varying, lstm, prng):
             sird_tensor = torch.tensor(sird, dtype=torch.float32).unsqueeze(0)
             if len(sird_tensor.size()) < 3:
                 sird_tensor = sird_tensor.unsqueeze(0)
-            
-            params_tensor = torch.tensor(params, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+
+            params_tensor = (
+                torch.tensor(params, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+            )
             # run inference
             sird, params = model(params_tensor, sird_tensor)
             params = params.squeeze().detach().tolist()
@@ -412,7 +453,6 @@ def main(display, time_varying, lstm, prng):
         # save output in time_varying_post_lstm.csv
         save_post(config, params_collection)
 
-        
 
 if __name__ == "__main__":
     main()
